@@ -423,8 +423,9 @@ function closeModal() {
 function confirmJoin() {
   const nick = document.getElementById('nickname-input').value.trim();
   if (!nick || pendingSlot === null) { document.getElementById('nickname-input').focus(); return; }
+  const si = pendingSlot;
   closeModal();
-  joinSlot(pendingSlot, nick);
+  joinSlot(si, nick);
 }
 
 document.getElementById('btn-modal-confirm').addEventListener('click', confirmJoin);
