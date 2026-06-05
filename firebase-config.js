@@ -1,11 +1,12 @@
 // Replace with your Firebase project config
 // Firebase Console → Project Settings → Your apps → Web app → Config
 const firebaseConfig = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
-  databaseURL:       "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId:             "YOUR_APP_ID"
+  apiKey: "AIzaSyAk2XHcSiKQyWXImGZGfA-kXSI5pwEqtoU",
+  authDomain: "thegoodgame-3b670.firebaseapp.com",
+  databaseURL: "https://thegoodgame-3b670-default-rtdb.firebaseio.com",
+  projectId: "thegoodgame-3b670",
+  storageBucket: "thegoodgame-3b670.firebasestorage.app",
+  messagingSenderId: "321525181369",
+  appId: "1:321525181369:web:10e533051aa3149e89e468",
+  measurementId: "G-HY26FT8NNC"
 };
