@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Credit Generator Battle</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>CREDIT GENERATOR BATTLE</h1>
+    </header>
+    <main id="battle-field">
+      <div class="player-panel" id="panel-0"></div>
+      <div class="vs-divider">VS</div>
+      <div class="player-panel" id="panel-1"></div>
+    </main>
+  </div>
+
+  <div id="modal-overlay" class="hidden">
+    <div id="modal-box">
+      <h2>JOIN SLOT <span id="modal-slot-num"></span></h2>
+      <input type="text" id="nickname-input" placeholder="Nickname (max 12)" maxlength="12" autocomplete="off" spellcheck="false">
+      <div id="modal-actions">
+        <button id="btn-modal-confirm">JOIN</button>
+        <button id="btn-modal-cancel">CANCEL</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
