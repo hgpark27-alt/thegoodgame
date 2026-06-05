@@ -41,6 +41,27 @@ function makeDefault() {
   };
 }
 
+// ── Save / Load Codec ──────────────────────────────────────────────
+function encodeState(genLv, amLv, odUnlocked, credit) {
+  const raw = [genLv, amLv, odUnlocked ? 1 : 0, Math.floor(credit)].join(',');
+  return btoa(raw);
+}
+
+function decodeState(code) {
+  try {
+    const raw   = atob(code.trim());
+    const parts = raw.split(',');
+    if (parts.length !== 4) return null;
+    const genLv     = parseInt(parts[0]);
+    const amLv      = parseInt(parts[1]);
+    const odUnlocked = parts[2] === '1';
+    const credit    = parseFloat(parts[3]);
+    if ([genLv, amLv, credit].some(isNaN)) return null;
+    if (genLv < 1 || amLv < 0 || credit < 0) return null;
+    return { genLv, amLv, odUnlocked, credit };
+  } catch { return null; }
+}
+
 // ── State ──────────────────────────────────────────────────────────
 let db;
 
@@ -64,10 +85,11 @@ let localAMCost   = 300;
 let localODCost   = 1200;
 let costsReady    = false;
 
-let slotCache   = [makeDefault(), makeDefault()];
-let pendingSlot = null;
-let tickId      = null;
-let syncId      = null;
+let slotCache    = [makeDefault(), makeDefault()];
+let pendingSlot  = null;
+let loadPendingSlot = null;
+let tickId       = null;
+let syncId       = null;
 
 // ── Firebase ───────────────────────────────────────────────────────
 function initFirebase() {
@@ -84,7 +106,7 @@ function initFirebase() {
   });
 }
 
-async function joinSlot(si, nickname) {
+async function joinSlot(si, nickname, savedState = null) {
   try {
     const snap = await db.ref(`game/slots/${si}`).once('value');
     if (snap.val()?.active) { alert('이 슬롯은 방금 참여됐습니다.'); renderPanel(0); renderPanel(1); return; }
@@ -95,15 +117,25 @@ async function joinSlot(si, nickname) {
       await db.ref('game').set({ slots: { 0: makeDefault(), 1: makeDefault() } });
     }
 
-    const initial = Object.assign(makeDefault(), { active: true, playerId: myId, playerName: nickname.slice(0, 12) });
+    // 로컬 상태를 Firebase write 전에 먼저 세팅 (리스너 발화 타이밍 문제 방지)
+    mySlot = si;
+    localCredit   = savedState ? savedState.credit  : 0;
+    localGenLv    = savedState ? savedState.genLv   : 1;
+    localAMLv     = savedState ? savedState.amLv    : 0;
+    localODUnlock = savedState ? savedState.odUnlocked : false;
+    localODState  = 'inactive'; localODExp = 0;
+    prevODState   = 'inactive'; costsReady = false;
+
+    const initial = Object.assign(makeDefault(), {
+      active: true, playerId: myId, playerName: nickname.slice(0, 12),
+      credit:           localCredit,
+      genLevel:         localGenLv,
+      autoMinerLevel:   localAMLv,
+      overDriveUnlocked: localODUnlock,
+      baseProduction:   calcBase(localGenLv, localAMLv),
+    });
+
     const slotRef = db.ref(`game/slots/${si}`);
-
-    // 로컬 상태를 먼저 세팅 — Firebase 리스너가 set() 직후 즉시 발화하므로
-    // mySlot이 설정된 상태에서 isMe=true로 렌더링되어야 Shop이 표시됨
-    mySlot = si; localCredit = 0; localGenLv = 1; localAMLv = 0;
-    localODUnlock = false; localODState = 'inactive'; localODExp = 0;
-    prevODState = 'inactive'; costsReady = false;
-
     await slotRef.set(initial);
     slotRef.onDisconnect().set(makeDefault());
 
@@ -116,6 +148,7 @@ async function joinSlot(si, nickname) {
       refreshMyPanel();
     }, 2000);
   } catch (e) {
+    mySlot = null;
     alert('참여 실패: ' + e.message + '\n\nFirebase Database 규칙을 확인하세요.');
   }
 }
@@ -178,12 +211,72 @@ function unlockOverDrive() {
 function activateOverDrive() {
   if (!localODUnlock || localODState !== 'inactive') return;
   localODState = 'active'; localODExp = Date.now() + 15000;
-  prevODState = 'active'; syncToFirebase();
-  refreshMyPanel();
+  prevODState = 'active'; syncToFirebase(); refreshMyPanel();
 }
 function recalcCosts() {
   const bp = calcBase(localGenLv, localAMLv);
   localGenCost = genCost(bp); localAMCost = amCost(bp); localODCost = odCost(bp);
+}
+
+// ── Save / Load ────────────────────────────────────────────────────
+function saveGame() {
+  if (mySlot === null) return;
+  const code = encodeState(localGenLv, localAMLv, localODUnlock, localCredit);
+  document.getElementById('save-code-text').textContent = code;
+  document.getElementById('copy-confirm').classList.add('hidden');
+  document.getElementById('save-modal').classList.remove('hidden');
+}
+
+function copySaveCode() {
+  const code = document.getElementById('save-code-text').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    document.getElementById('copy-confirm').classList.remove('hidden');
+  }).catch(() => {
+    // fallback: select text
+    const el = document.getElementById('save-code-text');
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+  });
+}
+
+function closeSaveModal() {
+  document.getElementById('save-modal').classList.add('hidden');
+}
+
+function onLoadClick(si) {
+  if (mySlot !== null || slotCache[si]?.active) return;
+  loadPendingSlot = si;
+  document.getElementById('load-slot-num').textContent = si + 1;
+  document.getElementById('load-nickname').value = '';
+  document.getElementById('load-code-input').value = '';
+  document.getElementById('load-error').classList.add('hidden');
+  document.getElementById('load-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('load-nickname').focus(), 50);
+}
+
+function closeLoadModal() {
+  document.getElementById('load-modal').classList.add('hidden');
+  loadPendingSlot = null;
+}
+
+function confirmLoad() {
+  const nick = document.getElementById('load-nickname').value.trim();
+  const code = document.getElementById('load-code-input').value.trim();
+
+  if (!nick) { document.getElementById('load-nickname').focus(); return; }
+
+  const state = decodeState(code);
+  if (!state) {
+    document.getElementById('load-error').classList.remove('hidden');
+    document.getElementById('load-code-input').focus();
+    return;
+  }
+
+  const si = loadPendingSlot;
+  closeLoadModal();
+  joinSlot(si, nick, state);
 }
 
 // ── Render ─────────────────────────────────────────────────────────
@@ -194,7 +287,6 @@ function renderPanel(si) {
   const isMe = mySlot === si && data.playerId === myId;
 
   if (!data.active) {
-    // Re-render empty if state changed or mySlot changed (affects button visibility)
     const newState = `empty-${mySlot}`;
     if (panel.dataset.state !== newState) {
       panel.dataset.state = newState;
@@ -215,7 +307,11 @@ function renderEmpty(panel, si) {
     <div class="slot-empty">
       <div class="slot-label">SLOT ${si + 1}</div>
       <div class="empty-text">Empty</div>
-      ${mySlot === null ? `<button class="btn-join" onclick="onJoinClick(${si})">참여하기</button>` : ''}
+      ${mySlot === null ? `
+      <div class="join-row">
+        <button class="btn-join" onclick="onJoinClick(${si})">참여하기</button>
+        <button class="btn-load-slot" onclick="onLoadClick(${si})">불러오기</button>
+      </div>` : ''}
     </div>`;
 }
 
@@ -244,7 +340,10 @@ function renderActive(panel, si, data, isMe) {
       <div class="shop-wrap">
         <div class="section-label">Shop</div>
         <div id="shop-${si}">${buildShopHTML()}</div>
-        <button class="btn-leave-full" onclick="leaveSlot()">나가기</button>
+        <div class="bottom-row">
+          <button class="btn-save-game" onclick="saveGame()">저장</button>
+          <button class="btn-leave-full" onclick="leaveSlot()">나가기</button>
+        </div>
       </div>` : ''}
     </div>`;
 }
@@ -254,8 +353,8 @@ function buildInstalledHTML(genLv, amLv, odUnlk, odState, bp) {
   let odLine = '';
   if (odUnlk) {
     if (odState === 'active')        odLine = `<div class="inst-item">Over Drive: ACTIVE ⚡</div>`;
-    else if (odState === 'cooldown') odLine = `<div class="inst-item inst-dim">Over Drive: Cooldown</div>`;
-    else                             odLine = `<div class="inst-item inst-dim">Over Drive: Ready</div>`;
+    else if (odState === 'cooldown') odLine = `<div class="inst-dim">Over Drive: Cooldown</div>`;
+    else                             odLine = `<div class="inst-dim">Over Drive: Ready</div>`;
   }
   return `
     <div class="inst-item">Generator Lv${genLv}</div>
@@ -265,7 +364,7 @@ function buildInstalledHTML(genLv, amLv, odUnlk, odState, bp) {
 }
 
 function buildShopHTML() {
-  // ── Over Drive (1st) ──
+  // Over Drive (1st)
   let odItem;
   if (!localODUnlock) {
     const can  = costsReady && localCredit >= localODCost;
@@ -298,7 +397,7 @@ function buildShopHTML() {
     </button>`;
   }
 
-  // ── Auto Miner (2nd) ──
+  // Auto Miner (2nd)
   const aCan  = costsReady && localCredit >= localAMCost;
   const aStr  = costsReady ? formatNum(localAMCost) : '...';
   const cur   = (1 + localAMLv * 0.25).toFixed(2);
@@ -310,7 +409,7 @@ function buildShopHTML() {
     <span class="sc">Cost: ${aStr}</span>
   </button>`;
 
-  // ── Generator (3rd) ──
+  // Generator (3rd)
   const gCan   = costsReady && localCredit >= localGenCost;
   const gStr   = costsReady ? formatNum(localGenCost) : '...';
   const nextBp = formatNum(calcBase(localGenLv + 1, localAMLv));
@@ -352,19 +451,15 @@ function updateOppStats(si, data) {
 
 function updateODBtn() {
   if (mySlot === null) return;
-
   if (localODState !== prevODState) {
     prevODState = localODState;
     const shopEl = document.getElementById(`shop-${mySlot}`);
     if (shopEl) shopEl.innerHTML = buildShopHTML();
     return;
   }
-
   if (localODState === 'active' || localODState === 'cooldown') {
     const timerEl = document.getElementById('od-shop-timer');
-    if (timerEl) {
-      timerEl.textContent = Math.max(0, Math.ceil((localODExp - Date.now()) / 1000)) + 's';
-    }
+    if (timerEl) timerEl.textContent = Math.max(0, Math.ceil((localODExp - Date.now()) / 1000)) + 's';
   }
 }
 
@@ -395,7 +490,7 @@ function refreshAfford() {
   upd('od',  !localODUnlock && localCredit >= localODCost);
 }
 
-// ── Modal ──────────────────────────────────────────────────────────
+// ── Join Modal ─────────────────────────────────────────────────────
 function onJoinClick(si) {
   if (mySlot !== null || slotCache[si]?.active) return;
   pendingSlot = si;
@@ -416,6 +511,7 @@ function confirmJoin() {
   joinSlot(si, nick);
 }
 
+// ── Events ─────────────────────────────────────────────────────────
 document.getElementById('btn-modal-confirm').addEventListener('click', confirmJoin);
 document.getElementById('btn-modal-cancel').addEventListener('click', closeModal);
 document.getElementById('nickname-input').addEventListener('keydown', e => {
@@ -424,6 +520,22 @@ document.getElementById('nickname-input').addEventListener('keydown', e => {
 });
 document.getElementById('modal-overlay').addEventListener('click', e => {
   if (e.target.id === 'modal-overlay') closeModal();
+});
+
+document.getElementById('btn-confirm-load').addEventListener('click', confirmLoad);
+document.getElementById('btn-cancel-load').addEventListener('click', closeLoadModal);
+document.getElementById('load-modal').addEventListener('click', e => {
+  if (e.target.id === 'load-modal') closeLoadModal();
+});
+document.getElementById('load-code-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter')  confirmLoad();
+  if (e.key === 'Escape') closeLoadModal();
+});
+
+document.getElementById('btn-copy-code').addEventListener('click', copySaveCode);
+document.getElementById('btn-close-save').addEventListener('click', closeSaveModal);
+document.getElementById('save-modal').addEventListener('click', e => {
+  if (e.target.id === 'save-modal') closeSaveModal();
 });
 
 // ── Boot ───────────────────────────────────────────────────────────
