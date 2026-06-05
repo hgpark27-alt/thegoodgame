@@ -90,6 +90,7 @@ let pendingSlot  = null;
 let loadPendingSlot = null;
 let tickId       = null;
 let syncId       = null;
+let lastTickTime = 0;
 
 // ── Firebase ───────────────────────────────────────────────────────
 function initFirebase() {
@@ -174,7 +175,7 @@ function syncToFirebase() {
 }
 
 // ── Tick ───────────────────────────────────────────────────────────
-function startTick() { stopTick(); tickId = setInterval(tick, 100); }
+function startTick() { stopTick(); lastTickTime = Date.now(); tickId = setInterval(tick, 100); }
 function stopTick()  { clearInterval(tickId); tickId = null; }
 function startSync() { stopSync(); syncId = setInterval(syncToFirebase, 1000); }
 function stopSync()  { clearInterval(syncId); syncId = null; }
@@ -182,12 +183,14 @@ function stopSync()  { clearInterval(syncId); syncId = null; }
 function tick() {
   if (mySlot === null) return;
   const now = Date.now();
+  const dt  = lastTickTime > 0 ? Math.min(now - lastTickTime, 300000) : 100;
+  lastTickTime = now;
   if (localODState === 'active' && now >= localODExp) {
     localODState = 'cooldown'; localODExp = now + 180000; syncToFirebase();
   } else if (localODState === 'cooldown' && now >= localODExp) {
     localODState = 'inactive'; localODExp = 0; syncToFirebase();
   }
-  localCredit += calcFinal(localGenLv, localAMLv, localODState === 'active') / 10;
+  localCredit += calcFinal(localGenLv, localAMLv, localODState === 'active') * dt / 1000;
   updateMyStats();
   updateODBtn();
 }
@@ -536,6 +539,11 @@ document.getElementById('btn-copy-code').addEventListener('click', copySaveCode)
 document.getElementById('btn-close-save').addEventListener('click', closeSaveModal);
 document.getElementById('save-modal').addEventListener('click', e => {
   if (e.target.id === 'save-modal') closeSaveModal();
+});
+
+// ── Visibility catch-up ────────────────────────────────────────────
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && mySlot !== null) tick();
 });
 
 // ── Boot ───────────────────────────────────────────────────────────
