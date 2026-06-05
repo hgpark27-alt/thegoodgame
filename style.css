@@ -203,20 +203,31 @@ h1 { font-size: 0.95rem; letter-spacing: 2px; color: var(--text); font-weight: 6
 }
 .btn-ghost:hover { border-color: #bbb; color: #555; }
 
-/* save-specific */
-.save-hint {
-  font-size: 0.78rem; color: var(--dim); line-height: 1.4;
-}
-
-.code-display {
+/* ── Inline save strip ── */
+.save-inline {
+  display: flex; align-items: center; gap: 7px;
+  margin-top: 7px; padding: 8px 10px;
   background: var(--surf); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 13px 12px; font-size: 0.82rem; font-family: 'Courier New', monospace;
-  word-break: break-all; user-select: all; cursor: text;
-  color: var(--text); line-height: 1.6; text-align: center;
 }
+.save-inline.hidden { display: none; }
+.save-inline-warn {
+  font-size: 0.72rem; color: var(--dim); white-space: nowrap; flex-shrink: 0;
+}
+.save-inline-code {
+  flex: 1; font-size: 0.75rem; font-family: 'Courier New', monospace;
+  word-break: break-all; user-select: all; cursor: text; color: var(--text);
+  min-width: 0;
+}
+.save-inline-copy {
+  padding: 4px 10px; background: var(--text); color: #fff; border: none;
+  font-family: inherit; font-size: 0.75rem; font-weight: 600;
+  cursor: pointer; border-radius: var(--radius); white-space: nowrap; flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+.save-inline-copy:hover { opacity: 0.75; }
 
 .copy-confirm {
-  font-size: 0.75rem; color: var(--dim); text-align: center;
+  font-size: 0.72rem; color: var(--dim); text-align: right; margin-top: 2px;
 }
 .copy-confirm.hidden { display: none; }
 

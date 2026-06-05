@@ -225,31 +225,32 @@ function recalcCosts() {
 }
 
 // ── Save / Load ────────────────────────────────────────────────────
-function saveGame() {
+function saveGame(si) {
   if (mySlot === null) return;
   const name = slotCache[mySlot]?.playerName || '';
   const code = encodeState(name, localGenLv, localAMLv, localODUnlock, localCredit);
-  document.getElementById('save-code-text').textContent = code;
-  document.getElementById('copy-confirm').classList.add('hidden');
-  document.getElementById('save-modal').classList.remove('hidden');
+  const inlineEl = document.getElementById(`save-inline-${si}`);
+  const codeEl   = document.getElementById(`save-code-text-${si}`);
+  const confEl   = document.getElementById(`copy-confirm-${si}`);
+  if (!inlineEl || !codeEl) return;
+  codeEl.textContent = code;
+  if (confEl) confEl.classList.add('hidden');
+  inlineEl.classList.remove('hidden');
 }
 
-function copySaveCode() {
-  const code = document.getElementById('save-code-text').textContent;
+function copySaveCode(si) {
+  const code   = document.getElementById(`save-code-text-${si}`)?.textContent || '';
+  const confEl = document.getElementById(`copy-confirm-${si}`);
   navigator.clipboard.writeText(code).then(() => {
-    document.getElementById('copy-confirm').classList.remove('hidden');
+    if (confEl) confEl.classList.remove('hidden');
   }).catch(() => {
-    // fallback: select text
-    const el = document.getElementById('save-code-text');
+    const el = document.getElementById(`save-code-text-${si}`);
+    if (!el) return;
     const range = document.createRange();
     range.selectNodeContents(el);
     window.getSelection().removeAllRanges();
     window.getSelection().addRange(range);
   });
-}
-
-function closeSaveModal() {
-  document.getElementById('save-modal').classList.add('hidden');
 }
 
 function onLoadClick(si) {
@@ -342,9 +343,15 @@ function renderActive(panel, si, data, isMe) {
         <div class="section-label">Shop</div>
         <div id="shop-${si}">${buildShopHTML()}</div>
         <div class="bottom-row">
-          <button class="btn-save-game" onclick="saveGame()">저장</button>
+          <button class="btn-save-game" onclick="saveGame(${si})">저장</button>
           <button class="btn-leave-full" onclick="leaveSlot()">나가기</button>
         </div>
+        <div id="save-inline-${si}" class="save-inline hidden">
+          <span class="save-inline-warn">반드시 코드를 복사하세요</span>
+          <span class="save-inline-code" id="save-code-text-${si}"></span>
+          <button class="save-inline-copy" id="btn-copy-${si}" onclick="copySaveCode(${si})">복사</button>
+        </div>
+        <div id="copy-confirm-${si}" class="copy-confirm hidden">복사됐습니다</div>
       </div>` : ''}
     </div>`;
 }
@@ -533,11 +540,6 @@ document.getElementById('load-code-input').addEventListener('keydown', e => {
   if (e.key === 'Escape') closeLoadModal();
 });
 
-document.getElementById('btn-copy-code').addEventListener('click', copySaveCode);
-document.getElementById('btn-close-save').addEventListener('click', closeSaveModal);
-document.getElementById('save-modal').addEventListener('click', e => {
-  if (e.target === document.getElementById('save-modal')) closeSaveModal();
-});
 
 // ── Visibility catch-up ────────────────────────────────────────────
 document.addEventListener('visibilitychange', () => {
