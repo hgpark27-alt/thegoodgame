@@ -97,12 +97,15 @@ async function joinSlot(si, nickname) {
 
     const initial = Object.assign(makeDefault(), { active: true, playerId: myId, playerName: nickname.slice(0, 12) });
     const slotRef = db.ref(`game/slots/${si}`);
-    await slotRef.set(initial);
-    slotRef.onDisconnect().set(makeDefault());
 
+    // 로컬 상태를 먼저 세팅 — Firebase 리스너가 set() 직후 즉시 발화하므로
+    // mySlot이 설정된 상태에서 isMe=true로 렌더링되어야 Shop이 표시됨
     mySlot = si; localCredit = 0; localGenLv = 1; localAMLv = 0;
     localODUnlock = false; localODState = 'inactive'; localODExp = 0;
     prevODState = 'inactive'; costsReady = false;
+
+    await slotRef.set(initial);
+    slotRef.onDisconnect().set(makeDefault());
 
     startTick(); startSync();
 
