@@ -202,26 +202,24 @@ function tick() {
 function upgradeGenerator() {
   if (!costsReady || localCredit < localGenCost) return;
   localCredit -= localGenCost; localGenLv++;
-  recalcCosts(); syncToFirebase(); refreshMyPanel();
+  localGenCost = genCost(calcBase(localGenLv, localAMLv));
+  syncToFirebase(); refreshMyPanel();
 }
 function upgradeAutoMiner() {
   if (!costsReady || localCredit < localAMCost) return;
   localCredit -= localAMCost; localAMLv++;
-  recalcCosts(); syncToFirebase(); refreshMyPanel();
+  localAMCost = amCost(calcBase(localGenLv, localAMLv));
+  syncToFirebase(); refreshMyPanel();
 }
 function unlockOverDrive() {
   if (!costsReady || localODUnlock || localCredit < localODCost) return;
   localCredit -= localODCost; localODUnlock = true;
-  recalcCosts(); syncToFirebase(); refreshMyPanel();
+  syncToFirebase(); refreshMyPanel();
 }
 function activateOverDrive() {
   if (!localODUnlock || localODState !== 'inactive') return;
   localODState = 'active'; localODExp = Date.now() + 15000;
   prevODState = 'active'; syncToFirebase(); refreshMyPanel();
-}
-function recalcCosts() {
-  const bp = calcBase(localGenLv, localAMLv);
-  localGenCost = genCost(bp); localAMCost = amCost(bp); localODCost = odCost(bp);
 }
 
 // ── Save / Load ────────────────────────────────────────────────────
