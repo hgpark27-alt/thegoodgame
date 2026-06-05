@@ -430,6 +430,15 @@ function buildShopHTML() {
 }
 
 // ── Live Updates ───────────────────────────────────────────────────
+function updateDomBar() {
+  const c0 = mySlot === 0 ? localCredit : (slotCache[0]?.credit || 0);
+  const c1 = mySlot === 1 ? localCredit : (slotCache[1]?.credit || 0);
+  const total = c0 + c1;
+  const pct = total > 0 ? (c0 / total * 100) : 50;
+  const fill = document.getElementById('dom-bar-fill');
+  if (fill) fill.style.width = pct.toFixed(1) + '%';
+}
+
 function updateMyStats() {
   if (mySlot === null) return;
   const si = mySlot;
@@ -440,6 +449,7 @@ function updateMyStats() {
   if (cEl) cEl.textContent = `Credit: ${formatNum(localCredit)}`;
   if (pEl) pEl.textContent = `Production: ${formatNum(odActive ? calcFinal(localGenLv, localAMLv, true) : bp)}/sec${odActive ? ' ⚡' : ''}`;
   refreshAfford();
+  updateDomBar();
 }
 
 function updateOppStats(si, data) {
@@ -453,6 +463,7 @@ function updateOppStats(si, data) {
   if (instEl) instEl.innerHTML = buildInstalledHTML(
     data.genLevel || 1, data.autoMinerLevel || 0,
     !!data.overDriveUnlocked, data.overDriveState || 'inactive', bp);
+  updateDomBar();
 }
 
 function updateODBtn() {
