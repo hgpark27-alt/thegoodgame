@@ -42,23 +42,26 @@ function makeDefault() {
 }
 
 // ── Save / Load Codec ──────────────────────────────────────────────
-function encodeState(genLv, amLv, odUnlocked, credit) {
-  const raw = [genLv, amLv, odUnlocked ? 1 : 0, Math.floor(credit)].join(',');
-  return btoa(raw);
+function encodeState(nickname, genLv, amLv, odUnlocked, credit) {
+  const raw = [nickname, genLv, amLv, odUnlocked ? 1 : 0, Math.floor(credit)].join(',');
+  return btoa(unescape(encodeURIComponent(raw)));
 }
 
 function decodeState(code) {
   try {
-    const raw   = atob(code.trim());
-    const parts = raw.split(',');
+    const raw   = decodeURIComponent(escape(atob(code.trim())));
+    const idx   = raw.indexOf(',');
+    if (idx < 0) return null;
+    const nickname = raw.slice(0, idx);
+    const parts    = raw.slice(idx + 1).split(',');
     if (parts.length !== 4) return null;
-    const genLv     = parseInt(parts[0]);
-    const amLv      = parseInt(parts[1]);
+    const genLv      = parseInt(parts[0]);
+    const amLv       = parseInt(parts[1]);
     const odUnlocked = parts[2] === '1';
-    const credit    = parseFloat(parts[3]);
-    if ([genLv, amLv, credit].some(isNaN)) return null;
+    const credit     = parseFloat(parts[3]);
+    if (!nickname || [genLv, amLv, credit].some(isNaN)) return null;
     if (genLv < 1 || amLv < 0 || credit < 0) return null;
-    return { genLv, amLv, odUnlocked, credit };
+    return { nickname, genLv, amLv, odUnlocked, credit };
   } catch { return null; }
 }
 
@@ -224,7 +227,8 @@ function recalcCosts() {
 // ── Save / Load ────────────────────────────────────────────────────
 function saveGame() {
   if (mySlot === null) return;
-  const code = encodeState(localGenLv, localAMLv, localODUnlock, localCredit);
+  const name = slotCache[mySlot]?.playerName || '';
+  const code = encodeState(name, localGenLv, localAMLv, localODUnlock, localCredit);
   document.getElementById('save-code-text').textContent = code;
   document.getElementById('copy-confirm').classList.add('hidden');
   document.getElementById('save-modal').classList.remove('hidden');
@@ -252,11 +256,10 @@ function onLoadClick(si) {
   if (mySlot !== null || slotCache[si]?.active) return;
   loadPendingSlot = si;
   document.getElementById('load-slot-num').textContent = si + 1;
-  document.getElementById('load-nickname').value = '';
   document.getElementById('load-code-input').value = '';
   document.getElementById('load-error').classList.add('hidden');
   document.getElementById('load-modal').classList.remove('hidden');
-  setTimeout(() => document.getElementById('load-nickname').focus(), 50);
+  setTimeout(() => document.getElementById('load-code-input').focus(), 50);
 }
 
 function closeLoadModal() {
@@ -265,21 +268,16 @@ function closeLoadModal() {
 }
 
 function confirmLoad() {
-  const nick = document.getElementById('load-nickname').value.trim();
-  const code = document.getElementById('load-code-input').value.trim();
-
-  if (!nick) { document.getElementById('load-nickname').focus(); return; }
-
+  const code  = document.getElementById('load-code-input').value.trim();
   const state = decodeState(code);
   if (!state) {
     document.getElementById('load-error').classList.remove('hidden');
     document.getElementById('load-code-input').focus();
     return;
   }
-
   const si = loadPendingSlot;
   closeLoadModal();
-  joinSlot(si, nick, state);
+  joinSlot(si, state.nickname, state);
 }
 
 // ── Render ─────────────────────────────────────────────────────────
@@ -528,7 +526,7 @@ document.getElementById('modal-overlay').addEventListener('click', e => {
 document.getElementById('btn-confirm-load').addEventListener('click', confirmLoad);
 document.getElementById('btn-cancel-load').addEventListener('click', closeLoadModal);
 document.getElementById('load-modal').addEventListener('click', e => {
-  if (e.target.id === 'load-modal') closeLoadModal();
+  if (e.target === document.getElementById('load-modal')) closeLoadModal();
 });
 document.getElementById('load-code-input').addEventListener('keydown', e => {
   if (e.key === 'Enter')  confirmLoad();
@@ -538,7 +536,7 @@ document.getElementById('load-code-input').addEventListener('keydown', e => {
 document.getElementById('btn-copy-code').addEventListener('click', copySaveCode);
 document.getElementById('btn-close-save').addEventListener('click', closeSaveModal);
 document.getElementById('save-modal').addEventListener('click', e => {
-  if (e.target.id === 'save-modal') closeSaveModal();
+  if (e.target === document.getElementById('save-modal')) closeSaveModal();
 });
 
 // ── Visibility catch-up ────────────────────────────────────────────

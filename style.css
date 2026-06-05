@@ -161,55 +161,86 @@ h1 { font-size: 0.95rem; letter-spacing: 2px; color: var(--text); font-weight: 6
 }
 .btn-leave-full:hover { border-color: #999; color: #555; }
 
-/* ── Save Modal ── */
-.save-warn-box {
-  background: #fffbf0; border: 1px solid #e0c060; border-radius: var(--radius);
-  padding: 12px 14px; text-align: center;
+/* ── Modal overlay (shared) ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.25);
+  display: flex; align-items: center; justify-content: center; z-index: 200;
 }
-.save-warn-title { font-size: 0.9rem; font-weight: 700; color: #7a5500; margin-bottom: 3px; }
-.save-warn-sub   { font-size: 0.75rem; color: #9a7020; }
+.modal-overlay.hidden { display: none; }
+
+.modal-card {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px 22px;
+  width: 300px; display: flex; flex-direction: column; gap: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.08);
+}
+
+.modal-title {
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 2px;
+  color: var(--text); text-transform: uppercase;
+}
+
+/* inputs (shared) */
+.modal-card input[type="text"] {
+  padding: 9px 11px; background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); font-family: inherit; font-size: 0.88rem;
+  border-radius: var(--radius); width: 100%; outline: none;
+}
+.modal-card input[type="text"]:focus { border-color: #888; }
+
+/* buttons row */
+.modal-btns { display: flex; gap: 8px; }
+.btn-primary {
+  flex: 1; padding: 9px; background: var(--text); color: #fff; border: none;
+  font-family: inherit; font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; border-radius: var(--radius); transition: opacity 0.15s;
+}
+.btn-primary:hover { opacity: 0.75; }
+.btn-ghost {
+  flex: 1; padding: 9px; background: transparent; color: var(--dim);
+  border: 1px solid var(--border); font-family: inherit; font-size: 0.85rem;
+  cursor: pointer; border-radius: var(--radius);
+}
+.btn-ghost:hover { border-color: #bbb; color: #555; }
+
+/* save-specific */
+.save-hint {
+  font-size: 0.78rem; color: var(--dim); line-height: 1.4;
+}
 
 .code-display {
-  background: var(--surf2); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 12px 14px; font-size: 0.9rem; font-family: 'Courier New', monospace;
-  word-break: break-all; letter-spacing: 1px; user-select: all; cursor: text;
-  text-align: center; color: var(--text);
+  background: var(--surf); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 13px 12px; font-size: 0.82rem; font-family: 'Courier New', monospace;
+  word-break: break-all; user-select: all; cursor: text;
+  color: var(--text); line-height: 1.6; text-align: center;
 }
 
-.copy-confirm { font-size: 0.8rem; color: #4a8; text-align: center; margin-top: 4px; }
+.copy-confirm {
+  font-size: 0.75rem; color: var(--dim); text-align: center;
+}
+.copy-confirm.hidden { display: none; }
 
-/* ── Load Modal ── */
+/* load-specific */
 .load-err {
-  font-size: 0.8rem; color: #c44; padding: 4px 0;
+  font-size: 0.78rem; color: #b33; padding: 0;
 }
 .load-err.hidden { display: none; }
 
-/* ── Shared modal tweaks ── */
-.modal-actions-row { display: flex; gap: 8px; }
-.modal-box { display: flex; flex-direction: column; gap: 12px; }
-
-#load-nickname, #load-code-input {
-  padding: 9px 11px; background: var(--bg); border: 1px solid var(--border);
-  color: var(--text); font-family: inherit; font-size: 0.9rem;
-  border-radius: var(--radius); width: 100%; outline: none;
-}
-#load-nickname:focus, #load-code-input:focus { border-color: #888; }
-
-/* ── Modal ── */
+/* ── Join Modal (original) ── */
 #modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.3);
+  position: fixed; inset: 0; background: rgba(0,0,0,.25);
   display: flex; align-items: center; justify-content: center; z-index: 200;
 }
 #modal-overlay.hidden { display: none; }
 #modal-box {
   background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 24px; width: 280px; display: flex; flex-direction: column; gap: 12px;
-  box-shadow: 0 4px 16px rgba(0,0,0,.08);
+  padding: 24px 22px; width: 300px; display: flex; flex-direction: column; gap: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.08);
 }
-#modal-box h2 { color: var(--text); font-size: 0.9rem; letter-spacing: 1px; font-weight: 600; }
+#modal-box h2 { color: var(--text); font-size: 0.75rem; letter-spacing: 2px; font-weight: 700; }
 #nickname-input {
   padding: 9px 11px; background: var(--bg); border: 1px solid var(--border);
-  color: var(--text); font-family: inherit; font-size: 0.9rem;
+  color: var(--text); font-family: inherit; font-size: 0.88rem;
   border-radius: var(--radius); width: 100%; outline: none;
 }
 #nickname-input:focus { border-color: #888; }
@@ -225,7 +256,7 @@ h1 { font-size: 0.95rem; letter-spacing: 2px; color: var(--text); font-weight: 6
   border: 1px solid var(--border); font-family: inherit; font-size: 0.85rem;
   cursor: pointer; border-radius: var(--radius);
 }
-#btn-modal-cancel:hover { border-color: #bbb; color: #666; }
+#btn-modal-cancel:hover { border-color: #bbb; color: #555; }
 
 /* ── Responsive ── */
 @media (max-width: 680px) {

@@ -31,33 +31,29 @@
   </div>
 
   <!-- 불러오기 모달 -->
-  <div id="load-modal" class="hidden">
-    <div class="modal-box">
-      <h2>불러오기 — SLOT <span id="load-slot-num"></span></h2>
-      <input type="text" id="load-nickname" placeholder="닉네임 (최대 12자)" maxlength="12" autocomplete="off" spellcheck="false">
-      <input type="text" id="load-code-input" placeholder="저장 코드 입력" autocomplete="off" spellcheck="false">
-      <div id="load-error" class="load-err hidden">⚠ 잘못된 코드입니다. 다시 확인해주세요.</div>
-      <div class="modal-actions-row">
-        <button id="btn-confirm-load">불러오기</button>
-        <button id="btn-cancel-load" class="btn-secondary">취소</button>
+  <div id="load-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-title">LOAD — SLOT <span id="load-slot-num"></span></div>
+      <input type="text" id="load-code-input" placeholder="저장 코드 붙여넣기" autocomplete="off" spellcheck="false">
+      <div id="load-error" class="load-err hidden">코드가 올바르지 않습니다</div>
+      <div class="modal-btns">
+        <button id="btn-confirm-load" class="btn-primary">불러오기</button>
+        <button id="btn-cancel-load" class="btn-ghost">취소</button>
       </div>
     </div>
   </div>
 
   <!-- 저장 모달 -->
-  <div id="save-modal" class="hidden">
-    <div class="modal-box">
-      <h2>게임 저장</h2>
-      <div class="save-warn-box">
-        <div class="save-warn-title">⚠️ 반드시 이 코드를 복사하세요!</div>
-        <div class="save-warn-sub">창을 닫으면 코드를 다시 볼 수 없습니다</div>
-      </div>
+  <div id="save-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-title">SAVE CODE</div>
+      <div class="save-hint">이 코드로 나중에 이어할 수 있습니다. 복사해 두세요.</div>
       <div class="code-display" id="save-code-text"></div>
-      <div class="modal-actions-row">
-        <button id="btn-copy-code">복사하기</button>
-        <button id="btn-close-save" class="btn-secondary">닫기</button>
+      <div id="copy-confirm" class="copy-confirm hidden">복사됐습니다</div>
+      <div class="modal-btns">
+        <button id="btn-copy-code" class="btn-primary">복사</button>
+        <button id="btn-close-save" class="btn-ghost">닫기</button>
       </div>
-      <div id="copy-confirm" class="copy-confirm hidden">✓ 복사됐습니다</div>
     </div>
   </div>
 
