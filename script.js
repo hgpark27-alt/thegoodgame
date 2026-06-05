@@ -18,11 +18,9 @@ function formatNum(n) {
 function calcBase(genLv, amLv) {
   return Math.pow(2, (genLv || 1) - 1) * (1 + (amLv || 0) * 0.25);
 }
-
 function calcFinal(genLv, amLv, odActive) {
   return calcBase(genLv, amLv) * (odActive ? 10 : 1);
 }
-
 function genCost(bp)  { return Math.max(1, Math.floor(bp * 600));  }
 function amCost(bp)   { return Math.max(1, Math.floor(bp * 300));  }
 function odCost(bp)   { return Math.max(1, Math.floor(bp * 1200)); }
@@ -34,7 +32,7 @@ function esc(s) {
 
 function makeDefault() {
   return {
-    active: false, playerId: null, playerName: null,
+    active: false, playerId: '', playerName: '',
     credit: 0, genLevel: 1, autoMinerLevel: 0,
     overDriveUnlocked: false,
     overDriveState: 'inactive',
@@ -52,21 +50,21 @@ const myId = (() => {
   return id;
 })();
 
-let mySlot         = null;
-let localCredit    = 0;
-let localGenLv     = 1;
-let localAMLv      = 0;
-let localODUnlock  = false;
-let localODState   = 'inactive'; // 'inactive' | 'active' | 'cooldown'
-let localODExp     = 0;          // timestamp when current OD state expires
-let prevODState    = 'inactive';
+let mySlot        = null;
+let localCredit   = 0;
+let localGenLv    = 1;
+let localAMLv     = 0;
+let localODUnlock = false;
+let localODState  = 'inactive';
+let localODExp    = 0;
+let prevODState   = 'inactive';
 
-let localGenCost   = 600;
-let localAMCost    = 300;
-let localODCost    = 1200;
-let costsReady     = false;
+let localGenCost  = 600;
+let localAMCost   = 300;
+let localODCost   = 1200;
+let costsReady    = false;
 
-let slotCache  = [makeDefault(), makeDefault()];
+let slotCache   = [makeDefault(), makeDefault()];
 let pendingSlot = null;
 let tickId      = null;
 let syncId      = null;
@@ -87,32 +85,36 @@ function initFirebase() {
 }
 
 async function joinSlot(si, nickname) {
-  const snap = await db.ref(`game/slots/${si}`).once('value');
-  if (snap.val()?.active) { alert('이 슬롯은 방금 참여됐습니다.'); renderPanel(0); renderPanel(1); return; }
+  try {
+    const snap = await db.ref(`game/slots/${si}`).once('value');
+    if (snap.val()?.active) { alert('이 슬롯은 방금 참여됐습니다.'); renderPanel(0); renderPanel(1); return; }
 
-  const allSnap = await db.ref('game/slots').once('value');
-  const allRaw  = allSnap.val() || {};
-  if (!allRaw[0]?.active && !allRaw[1]?.active) {
-    await db.ref('game').set({ slots: { 0: makeDefault(), 1: makeDefault() } });
+    const allSnap = await db.ref('game/slots').once('value');
+    const allRaw  = allSnap.val() || {};
+    if (!allRaw[0]?.active && !allRaw[1]?.active) {
+      await db.ref('game').set({ slots: { 0: makeDefault(), 1: makeDefault() } });
+    }
+
+    const initial = Object.assign(makeDefault(), { active: true, playerId: myId, playerName: nickname.slice(0, 12) });
+    const slotRef = db.ref(`game/slots/${si}`);
+    await slotRef.set(initial);
+    slotRef.onDisconnect().set(makeDefault());
+
+    mySlot = si; localCredit = 0; localGenLv = 1; localAMLv = 0;
+    localODUnlock = false; localODState = 'inactive'; localODExp = 0;
+    prevODState = 'inactive'; costsReady = false;
+
+    startTick(); startSync();
+
+    setTimeout(() => {
+      const bp = calcBase(localGenLv, localAMLv);
+      localGenCost = genCost(bp); localAMCost = amCost(bp); localODCost = odCost(bp);
+      costsReady = true;
+      refreshMyPanel();
+    }, 2000);
+  } catch (e) {
+    alert('참여 실패: ' + e.message + '\n\nFirebase Database 규칙을 확인하세요.');
   }
-
-  const initial = Object.assign(makeDefault(), { active: true, playerId: myId, playerName: nickname.slice(0, 12) });
-  const slotRef = db.ref(`game/slots/${si}`);
-  await slotRef.set(initial);
-  slotRef.onDisconnect().set(makeDefault());
-
-  mySlot = si; localCredit = 0; localGenLv = 1; localAMLv = 0;
-  localODUnlock = false; localODState = 'inactive'; localODExp = 0;
-  prevODState = 'inactive'; costsReady = false;
-
-  startTick(); startSync();
-
-  setTimeout(() => {
-    const bp  = calcBase(localGenLv, localAMLv);
-    localGenCost = genCost(bp); localAMCost = amCost(bp); localODCost = odCost(bp);
-    costsReady = true;
-    refreshMyPanel();
-  }, 2000);
 }
 
 function leaveSlot() {
@@ -144,13 +146,11 @@ function stopSync()  { clearInterval(syncId); syncId = null; }
 function tick() {
   if (mySlot === null) return;
   const now = Date.now();
-
   if (localODState === 'active' && now >= localODExp) {
     localODState = 'cooldown'; localODExp = now + 180000; syncToFirebase();
   } else if (localODState === 'cooldown' && now >= localODExp) {
     localODState = 'inactive'; localODExp = 0; syncToFirebase();
   }
-
   localCredit += calcFinal(localGenLv, localAMLv, localODState === 'active') / 10;
   updateMyStats();
   updateODBtn();
@@ -162,25 +162,22 @@ function upgradeGenerator() {
   localCredit -= localGenCost; localGenLv++;
   recalcCosts(); syncToFirebase(); refreshMyPanel();
 }
-
 function upgradeAutoMiner() {
   if (!costsReady || localCredit < localAMCost) return;
   localCredit -= localAMCost; localAMLv++;
   recalcCosts(); syncToFirebase(); refreshMyPanel();
 }
-
 function unlockOverDrive() {
   if (!costsReady || localODUnlock || localCredit < localODCost) return;
   localCredit -= localODCost; localODUnlock = true;
   recalcCosts(); syncToFirebase(); refreshMyPanel();
 }
-
 function activateOverDrive() {
   if (!localODUnlock || localODState !== 'inactive') return;
   localODState = 'active'; localODExp = Date.now() + 15000;
-  prevODState = 'active'; syncToFirebase(); updateODBtn();
+  prevODState = 'active'; syncToFirebase();
+  refreshMyPanel();
 }
-
 function recalcCosts() {
   const bp = calcBase(localGenLv, localAMLv);
   localGenCost = genCost(bp); localAMCost = amCost(bp); localODCost = odCost(bp);
@@ -194,7 +191,12 @@ function renderPanel(si) {
   const isMe = mySlot === si && data.playerId === myId;
 
   if (!data.active) {
-    if (panel.dataset.state !== 'empty') { panel.dataset.state = 'empty'; renderEmpty(panel, si); }
+    // Re-render empty if state changed or mySlot changed (affects button visibility)
+    const newState = `empty-${mySlot}`;
+    if (panel.dataset.state !== newState) {
+      panel.dataset.state = newState;
+      renderEmpty(panel, si);
+    }
     return;
   }
   if (panel.dataset.state === `active-${data.playerId}`) {
@@ -221,106 +223,102 @@ function renderActive(panel, si, data, isMe) {
   const amLv   = isMe ? localAMLv   : (data.autoMinerLevel || 0);
   const odUnlk = isMe ? localODUnlock : !!data.overDriveUnlocked;
   const odSt   = isMe ? localODState  : (data.overDriveState || 'inactive');
-  const odExp  = isMe ? localODExp    : (data.overDriveExpiresAt || 0);
 
   panel.innerHTML = `
     <div class="slot-active${isMe ? ' is-me' : ''}">
       <div class="slot-header">
         <span class="player-name">${esc(data.playerName)}</span>
-        ${isMe ? `<button class="btn-leave" onclick="leaveSlot()">LEAVE</button>` : ''}
       </div>
       <div class="credit-block">
         <div class="credit-val" id="credit-${si}">Credit: ${formatNum(credit)}</div>
         <div class="cps-val" id="cps-${si}">Production: ${formatNum(bp)}/sec</div>
       </div>
-      <div class="od-wrap" id="od-wrap-${si}">
-        ${buildODBox(si, isMe, odUnlk, odSt, odExp)}
-      </div>
       <div class="installed-wrap">
         <div class="section-label">Installed Items</div>
-        <div id="installed-${si}">${buildInstalledHTML(genLv, amLv, odUnlk, bp)}</div>
+        <div id="installed-${si}">${buildInstalledHTML(genLv, amLv, odUnlk, odSt, bp)}</div>
       </div>
       ${isMe ? `
       <div class="shop-wrap">
         <div class="section-label">Shop</div>
         <div id="shop-${si}">${buildShopHTML()}</div>
+        <button class="btn-leave-full" onclick="leaveSlot()">나가기</button>
       </div>` : ''}
     </div>`;
 }
 
-// ── OD Box ─────────────────────────────────────────────────────────
-function buildODBox(si, isMe, unlocked, state, expiresAt) {
-  if (!unlocked) {
-    return `<div class="od-box od-locked">
-      <div class="od-name">OVER DRIVE</div>
-      <div class="od-desc">× 10 Production · 15s · Cooldown 3min</div>
-      <div class="od-hint">Purchase in Shop to unlock</div>
-    </div>`;
+// ── HTML Builders ──────────────────────────────────────────────────
+function buildInstalledHTML(genLv, amLv, odUnlk, odState, bp) {
+  let odLine = '';
+  if (odUnlk) {
+    if (odState === 'active')        odLine = `<div class="inst-item">Over Drive: ACTIVE ⚡</div>`;
+    else if (odState === 'cooldown') odLine = `<div class="inst-item inst-dim">Over Drive: Cooldown</div>`;
+    else                             odLine = `<div class="inst-item inst-dim">Over Drive: Ready</div>`;
   }
-  if (state === 'active') {
-    const rem = isMe ? Math.max(0, Math.ceil((localODExp - Date.now()) / 1000)) : '—';
-    return `<div class="od-box od-active">
-      <div class="od-name">⚡ OVER DRIVE ACTIVE</div>
-      ${isMe ? `<div class="od-timer" id="od-timer-${si}">${rem}s</div>` : ''}
-    </div>`;
-  }
-  if (state === 'cooldown') {
-    const rem = isMe ? Math.max(0, Math.ceil((localODExp - Date.now()) / 1000)) : '—';
-    return `<div class="od-box od-cooldown">
-      <div class="od-name">OVER DRIVE COOLDOWN</div>
-      ${isMe ? `<div class="od-timer" id="od-timer-${si}">${rem}s</div>` : ''}
-    </div>`;
-  }
-  return `<button class="od-box od-ready" ${isMe ? 'onclick="activateOverDrive()"' : 'disabled'}>
-    <div class="od-name">▶ OVER DRIVE</div>
-    <div class="od-desc">× 10 Production for 15 seconds</div>
-  </button>`;
-}
-
-// ── Installed & Shop HTML ──────────────────────────────────────────
-function buildInstalledHTML(genLv, amLv, odUnlk, bp) {
   return `
     <div class="inst-item">Generator Lv${genLv}</div>
     ${amLv > 0 ? `<div class="inst-item">Auto Miner Lv${amLv}</div>` : ''}
-    ${odUnlk ? `<div class="inst-item">Over Drive Unlocked</div>` : ''}
+    ${odLine}
     <div class="inst-prod">Current Production: <span>${formatNum(bp)}/sec</span></div>`;
 }
 
 function buildShopHTML() {
-  const bp  = calcBase(localGenLv, localAMLv);
-  const gCan = costsReady && localCredit >= localGenCost;
-  const aCan = costsReady && localCredit >= localAMCost;
-  const oCan = costsReady && !localODUnlock && localCredit >= localODCost;
-  const gStr = costsReady ? formatNum(localGenCost) : '...';
-  const aStr = costsReady ? formatNum(localAMCost)  : '...';
-  const oStr = costsReady ? formatNum(localODCost)  : '...';
-  const nextBase = formatNum(calcBase(localGenLv + 1, localAMLv));
-  const curMult  = (1 + localAMLv * 0.25).toFixed(2);
-  const nxtMult  = (1 + (localAMLv + 1) * 0.25).toFixed(2);
-
-  return `
-    <button class="shop-btn${gCan ? '' : ' cant-afford'}" data-shop="gen"
-      onclick="upgradeGenerator()" ${gCan ? '' : 'disabled'}>
-      <span class="sn">Generator</span>
-      <span class="sl">Lv${localGenLv} → ${localGenLv + 1}</span>
-      <span class="sd">Base output → ${nextBase}/sec</span>
-      <span class="sc">Cost: ${gStr}</span>
-    </button>
-    <button class="shop-btn${aCan ? '' : ' cant-afford'}" data-shop="am"
-      onclick="upgradeAutoMiner()" ${aCan ? '' : 'disabled'}>
-      <span class="sn">Auto Miner</span>
-      <span class="sl">Lv${localAMLv} → ${localAMLv + 1}</span>
-      <span class="sd">Multiplier ×${curMult} → ×${nxtMult}</span>
-      <span class="sc">Cost: ${aStr}</span>
-    </button>
-    ${!localODUnlock ? `
-    <button class="shop-btn${oCan ? '' : ' cant-afford'}" data-shop="od"
-      onclick="unlockOverDrive()" ${oCan ? '' : 'disabled'}>
-      <span class="sn">Over Drive</span>
-      <span class="sl">Unlock</span>
+  // ── Over Drive (1st) ──
+  let odItem;
+  if (!localODUnlock) {
+    const can  = costsReady && localCredit >= localODCost;
+    const cStr = costsReady ? formatNum(localODCost) : '...';
+    odItem = `<button class="shop-btn${can ? '' : ' cant-afford'}" data-shop="od"
+      onclick="unlockOverDrive()" ${can ? '' : 'disabled'}>
+      <span class="sn">Over Drive</span><span class="sl">Unlock</span>
       <span class="sd">× 10 production · 15s · CD 3min</span>
-      <span class="sc">Cost: ${oStr}</span>
-    </button>` : ''}`;
+      <span class="sc">Cost: ${cStr}</span>
+    </button>`;
+  } else if (localODState === 'active') {
+    const rem = Math.max(0, Math.ceil((localODExp - Date.now()) / 1000));
+    odItem = `<div class="shop-btn od-active-row">
+      <span class="sn">Over Drive</span><span class="sl tag-active">ACTIVE ⚡</span>
+      <span class="sd">× 10 Production</span>
+      <span class="sc" id="od-shop-timer">${rem}s</span>
+    </div>`;
+  } else if (localODState === 'cooldown') {
+    const rem = Math.max(0, Math.ceil((localODExp - Date.now()) / 1000));
+    odItem = `<div class="shop-btn od-cd-row">
+      <span class="sn">Over Drive</span><span class="sl tag-cd">COOLDOWN</span>
+      <span class="sd">× 10 Production · 15s</span>
+      <span class="sc" id="od-shop-timer">${rem}s</span>
+    </div>`;
+  } else {
+    odItem = `<button class="shop-btn od-ready-row" onclick="activateOverDrive()">
+      <span class="sn">Over Drive</span><span class="sl tag-ready">READY</span>
+      <span class="sd">× 10 Production for 15s</span>
+      <span class="sc">▶ Activate</span>
+    </button>`;
+  }
+
+  // ── Auto Miner (2nd) ──
+  const aCan  = costsReady && localCredit >= localAMCost;
+  const aStr  = costsReady ? formatNum(localAMCost) : '...';
+  const cur   = (1 + localAMLv * 0.25).toFixed(2);
+  const nxt   = (1 + (localAMLv + 1) * 0.25).toFixed(2);
+  const amItem = `<button class="shop-btn${aCan ? '' : ' cant-afford'}" data-shop="am"
+    onclick="upgradeAutoMiner()" ${aCan ? '' : 'disabled'}>
+    <span class="sn">Auto Miner</span><span class="sl">Lv${localAMLv} → ${localAMLv + 1}</span>
+    <span class="sd">×${cur} → ×${nxt}</span>
+    <span class="sc">Cost: ${aStr}</span>
+  </button>`;
+
+  // ── Generator (3rd) ──
+  const gCan   = costsReady && localCredit >= localGenCost;
+  const gStr   = costsReady ? formatNum(localGenCost) : '...';
+  const nextBp = formatNum(calcBase(localGenLv + 1, localAMLv));
+  const genItem = `<button class="shop-btn${gCan ? '' : ' cant-afford'}" data-shop="gen"
+    onclick="upgradeGenerator()" ${gCan ? '' : 'disabled'}>
+    <span class="sn">Generator</span><span class="sl">Lv${localGenLv} → ${localGenLv + 1}</span>
+    <span class="sd">→ ${nextBp}/sec base</span>
+    <span class="sc">Cost: ${gStr}</span>
+  </button>`;
+
+  return odItem + amItem + genItem;
 }
 
 // ── Live Updates ───────────────────────────────────────────────────
@@ -329,13 +327,10 @@ function updateMyStats() {
   const si = mySlot;
   const odActive = localODState === 'active';
   const bp = calcBase(localGenLv, localAMLv);
-  const fp = calcFinal(localGenLv, localAMLv, odActive);
-
   const cEl = document.getElementById(`credit-${si}`);
   const pEl = document.getElementById(`cps-${si}`);
   if (cEl) cEl.textContent = `Credit: ${formatNum(localCredit)}`;
-  if (pEl) pEl.textContent = `Production: ${formatNum(odActive ? fp : bp)}/sec${odActive ? ' ⚡' : ''}`;
-
+  if (pEl) pEl.textContent = `Production: ${formatNum(odActive ? calcFinal(localGenLv, localAMLv, true) : bp)}/sec${odActive ? ' ⚡' : ''}`;
   refreshAfford();
 }
 
@@ -346,33 +341,26 @@ function updateOppStats(si, data) {
   const pEl = document.getElementById(`cps-${si}`);
   if (cEl) cEl.textContent = `Credit: ${formatNum(data.credit)}`;
   if (pEl) pEl.textContent = `Production: ${formatNum(bp)}/sec${odActive ? ' ⚡' : ''}`;
-
   const instEl = document.getElementById(`installed-${si}`);
   if (instEl) instEl.innerHTML = buildInstalledHTML(
-    data.genLevel || 1, data.autoMinerLevel || 0, !!data.overDriveUnlocked, bp);
-
-  const odWrap = document.getElementById(`od-wrap-${si}`);
-  if (odWrap) odWrap.innerHTML = buildODBox(si, false,
-    !!data.overDriveUnlocked, data.overDriveState || 'inactive', data.overDriveExpiresAt || 0);
+    data.genLevel || 1, data.autoMinerLevel || 0,
+    !!data.overDriveUnlocked, data.overDriveState || 'inactive', bp);
 }
 
 function updateODBtn() {
   if (mySlot === null) return;
-  const si = mySlot;
-  const odWrap = document.getElementById(`od-wrap-${si}`);
-  if (!odWrap) return;
 
   if (localODState !== prevODState) {
     prevODState = localODState;
-    odWrap.innerHTML = buildODBox(si, true, localODUnlock, localODState, localODExp);
+    const shopEl = document.getElementById(`shop-${mySlot}`);
+    if (shopEl) shopEl.innerHTML = buildShopHTML();
     return;
   }
 
   if (localODState === 'active' || localODState === 'cooldown') {
-    const timerEl = document.getElementById(`od-timer-${si}`);
+    const timerEl = document.getElementById('od-shop-timer');
     if (timerEl) {
-      const rem = Math.max(0, Math.ceil((localODExp - Date.now()) / 1000));
-      timerEl.textContent = rem + 's';
+      timerEl.textContent = Math.max(0, Math.ceil((localODExp - Date.now()) / 1000)) + 's';
     }
   }
 }
@@ -383,10 +371,9 @@ function refreshMyPanel() {
   const bp = calcBase(localGenLv, localAMLv);
   const instEl = document.getElementById(`installed-${si}`);
   const shopEl = document.getElementById(`shop-${si}`);
-  const odWrap = document.getElementById(`od-wrap-${si}`);
-  if (instEl) instEl.innerHTML = buildInstalledHTML(localGenLv, localAMLv, localODUnlock, bp);
+  if (instEl) instEl.innerHTML = buildInstalledHTML(localGenLv, localAMLv, localODUnlock, localODState, bp);
   if (shopEl) shopEl.innerHTML = buildShopHTML();
-  if (odWrap) odWrap.innerHTML = buildODBox(si, true, localODUnlock, localODState, localODExp);
+  prevODState = localODState;
   updateMyStats();
 }
 
@@ -394,8 +381,8 @@ function refreshAfford() {
   if (!costsReady || mySlot === null) return;
   const shopEl = document.getElementById(`shop-${mySlot}`);
   if (!shopEl) return;
-  const upd = (sel, can) => {
-    const btn = shopEl.querySelector(`[data-shop="${sel}"]`);
+  const upd = (key, can) => {
+    const btn = shopEl.querySelector(`[data-shop="${key}"]`);
     if (!btn) return;
     btn.disabled = !can;
     btn.classList.toggle('cant-afford', !can);
@@ -414,12 +401,10 @@ function onJoinClick(si) {
   document.getElementById('modal-overlay').classList.remove('hidden');
   setTimeout(() => document.getElementById('nickname-input').focus(), 50);
 }
-
 function closeModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
   pendingSlot = null;
 }
-
 function confirmJoin() {
   const nick = document.getElementById('nickname-input').value.trim();
   if (!nick || pendingSlot === null) { document.getElementById('nickname-input').focus(); return; }
