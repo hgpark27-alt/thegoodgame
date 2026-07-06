@@ -32,53 +32,28 @@
     </div>
   </div>
 
-  <button class="new-btn" onclick="openAddModal(currentProject||'Blackonyx','')">
+  <button class="new-btn" onclick="openAddModal(currentProjectId&&currentProjectId!=='__doe__'?currentProjectId:(Object.keys(projects)[0]||''),'')">
     <span class="material-symbols-outlined" style="font-size:16px">add</span>
     새 항목 추가
   </button>
 
   <nav style="flex:1;overflow-y:auto;padding:0 0 8px">
-    <div class="nav-section">Projects</div>
-    <div class="nav-item active" id="nav-all" style="margin-bottom:2px">
-      <span class="material-symbols-outlined mat-icon">grid_view</span>
-      <span>전체 보기</span>
+    <div class="nav-section">프로젝트</div>
+    <div class="nav-item active" id="nav-all">
+      <span class="material-symbols-outlined nav-icon">grid_view</span>
+      <span class="nav-label">전체 보기</span>
     </div>
-    <div class="nav-item" data-project="Blackonyx">
-      <span class="material-symbols-outlined mat-icon">science</span>
-      <span>Blackonyx</span>
-    </div>
-    <div class="nav-item" data-project="Bi-layer">
-      <span class="material-symbols-outlined mat-icon">layers</span>
-      <span>Bi-layer</span>
-    </div>
-    <div class="nav-item" data-project="PVD">
-      <span class="material-symbols-outlined mat-icon">memory</span>
-      <span>PVD</span>
-    </div>
+    <!-- 동적 프로젝트 트리 -->
+    <div id="sidebar-nav"></div>
 
     <div class="nav-divider"></div>
-    <div class="nav-section">Sub-Projects</div>
-    <div class="nav-item" data-project="Bi-layer" style="padding-left:28px;font-size:11px">
-      <span class="material-symbols-outlined mat-icon" style="font-size:15px">layers</span>
-      <span>Hardmasking</span>
+    <div class="nav-section">내보내기</div>
+    <div class="nav-item" onclick="exportExcel()" style="cursor:pointer">
+      <span class="material-symbols-outlined nav-icon">download</span>
+      <span>Excel</span>
     </div>
-    <div class="nav-item" style="padding-left:28px;font-size:11px;opacity:0.5;cursor:default">
-      <span class="material-symbols-outlined mat-icon" style="font-size:15px">settings_input_component</span>
-      <span>공정 관련</span>
-    </div>
-    <div class="nav-item" style="padding-left:28px;font-size:11px;opacity:0.5;cursor:default">
-      <span class="material-symbols-outlined mat-icon" style="font-size:15px">recycling</span>
-      <span>Powder 재활용</span>
-    </div>
-
-    <div class="nav-divider"></div>
-    <div class="nav-section">System</div>
-    <div class="nav-item" onclick="exportExcel()">
-      <span class="material-symbols-outlined mat-icon">download</span>
-      <span>Excel 내보내기</span>
-    </div>
-    <div class="nav-item" onclick="exportPDF()">
-      <span class="material-symbols-outlined mat-icon">print</span>
+    <div class="nav-item" onclick="exportPDF()" style="cursor:pointer">
+      <span class="material-symbols-outlined nav-icon">print</span>
       <span>PDF 출력</span>
     </div>
   </nav>
@@ -176,8 +151,10 @@
         </select>
       </div>
       <div class="modal-field">
-        <div class="modal-label">그룹 (선택)</div>
-        <input class="modal-input" id="add-group" type="text" placeholder="예: Al2O3 + YOF">
+        <div class="modal-label">서브프로젝트</div>
+        <select class="modal-select" id="add-group">
+          <option value="">없음 (그룹 없이)</option>
+        </select>
       </div>
     </div>
 
