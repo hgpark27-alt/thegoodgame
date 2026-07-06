@@ -57,6 +57,10 @@ let currentView = 'list';   // 'list' | 'tree'
 let addModalContext = null; // { project, group }
 let selectedTaskId = null;
 
+// 동시편집 보호: 현재 내가 편집 중인 셀 추적
+let activeEditCell = null;  // { taskId, field, el }
+let pendingRemoteRender = false;
+
 // ── Init ─────────────────────────────────────────────────────────
 function init() {
   firebase.initializeApp(firebaseConfig);
@@ -64,8 +68,15 @@ function init() {
 
   db.ref(`${DB_PATH}/tasks`).on('value', snap => {
     tasks = snap.val() || {};
-    renderTable();
+    // 편집 중인 셀이 있으면 테이블 재렌더 보류 (입력값 날아가는 것 방지)
+    if (activeEditCell) {
+      pendingRemoteRender = true;
+    } else {
+      renderTable();
+    }
     updateSummary();
+    // 열려있는 디테일 패널도 갱신 (편집 중인 필드 제외)
+    if (selectedTaskId) renderDetailRemote();
   });
 
   db.ref(`${DB_PATH}/tasks`).once('value', snap => {
@@ -274,6 +285,19 @@ function createTaskRow(t, inGroup) {
       const val = tasks[id]?.[field] || '';
       const isMultiline = ['refDetails','assignees','updateLog'].includes(field);
 
+      function finishEdit(newVal, save) {
+        activeEditCell = null;
+        if (save && newVal !== val) {
+          updateTask(id, field, newVal);
+        } else {
+          // 편집 끝난 후 보류됐던 리모트 변경 반영
+          if (pendingRemoteRender) { pendingRemoteRender = false; renderTable(); }
+          else renderTable();
+        }
+      }
+
+      activeEditCell = { taskId: id, field };
+
       if (isMultiline) {
         const ta = document.createElement('textarea');
         ta.className = 'cell-textarea';
@@ -281,12 +305,9 @@ function createTaskRow(t, inGroup) {
         cell.innerHTML = '';
         cell.appendChild(ta);
         ta.focus();
-        ta.addEventListener('blur', () => {
-          if (ta.value !== val) updateTask(id, field, ta.value);
-          else renderTable();
-        });
+        ta.addEventListener('blur', () => finishEdit(ta.value, true));
         ta.addEventListener('keydown', e2 => {
-          if (e2.key === 'Escape') { renderTable(); }
+          if (e2.key === 'Escape') finishEdit(val, false);
         });
       } else {
         const inp = document.createElement('input');
@@ -295,13 +316,10 @@ function createTaskRow(t, inGroup) {
         cell.innerHTML = '';
         cell.appendChild(inp);
         inp.focus(); inp.select();
-        inp.addEventListener('blur', () => {
-          if (inp.value !== val) updateTask(id, field, inp.value);
-          else renderTable();
-        });
+        inp.addEventListener('blur', () => finishEdit(inp.value, true));
         inp.addEventListener('keydown', e2 => {
-          if (e2.key === 'Enter')  { updateTask(id, field, inp.value); }
-          if (e2.key === 'Escape') { renderTable(); }
+          if (e2.key === 'Enter')  finishEdit(inp.value, true);
+          if (e2.key === 'Escape') finishEdit(val, false);
         });
       }
     });
@@ -473,23 +491,49 @@ function renderDetail() {
     el.addEventListener('click', () => {
       if (el.querySelector('input,textarea')) return;
       const val = tasks[id]?.[field] || '';
+
+      function finishDetailEdit(newVal, save) {
+        activeEditCell = null;
+        if (save && newVal !== val) updateTask(id, field, newVal);
+        else { if (pendingRemoteRender) { pendingRemoteRender = false; renderTable(); } renderDetail(); }
+      }
+
+      activeEditCell = { taskId: id, field };
+
       if (isMulti) {
         const ta = document.createElement('textarea');
         ta.className = 'cell-textarea'; ta.value = val;
         el.innerHTML = ''; el.appendChild(ta); ta.focus();
-        ta.addEventListener('blur', () => { if (ta.value !== val) updateTask(id, field, ta.value); else renderDetail(); });
-        ta.addEventListener('keydown', e => { if (e.key === 'Escape') renderDetail(); });
+        ta.addEventListener('blur', () => finishDetailEdit(ta.value, true));
+        ta.addEventListener('keydown', e => { if (e.key === 'Escape') finishDetailEdit(val, false); });
       } else {
         const inp = document.createElement('input');
         inp.className = 'cell-input'; inp.value = val;
         el.innerHTML = ''; el.appendChild(inp); inp.focus(); inp.select();
-        inp.addEventListener('blur', () => { if (inp.value !== val) updateTask(id, field, inp.value); else renderDetail(); });
+        inp.addEventListener('blur', () => finishDetailEdit(inp.value, true));
         inp.addEventListener('keydown', e => {
-          if (e.key === 'Enter') updateTask(id, field, inp.value);
-          if (e.key === 'Escape') renderDetail();
+          if (e.key === 'Enter') finishDetailEdit(inp.value, true);
+          if (e.key === 'Escape') finishDetailEdit(val, false);
         });
       }
     });
+  });
+}
+
+// 리모트 변경 시 디테일 패널 갱신 — 현재 편집 중인 필드는 건드리지 않음
+function renderDetailRemote() {
+  if (!selectedTaskId) return;
+  const t = tasks[selectedTaskId];
+  if (!t) { closeDetail(); return; }
+  const panel = document.getElementById('detail-panel');
+
+  // 편집 중인 필드가 있으면 해당 필드 제외하고 나머지만 갱신
+  panel.querySelectorAll('.detail-field-value[data-field]').forEach(el => {
+    if (el.querySelector('input,textarea')) return; // 편집 중 → 스킵
+    const field = el.dataset.field;
+    const newVal = t[field] || '';
+    if (field === 'status') return; // status는 badge 렌더라 스킵
+    el.textContent = newVal || '—';
   });
 }
 
