@@ -1,5 +1,5 @@
 // ================================================================
-//  BLACKONYX R&D Dashboard — v2 (dynamic project tree)
+//  BLACKONYX R&D Dashboard — v3 (date picker + calendar + gantt)
 // ================================================================
 const DB_PATH = 'blackonyx-pm';
 
@@ -69,6 +69,10 @@ let selectedTaskId = null;
 let activeEditCell = null;
 let pendingRemoteRender = false;
 
+let currentView  = 'list';
+let calViewYear  = new Date().getFullYear();
+let calViewMonth = new Date().getMonth();
+
 // ── Helpers ──────────────────────────────────────────────────────
 function esc(s) {
   return String(s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -98,6 +102,36 @@ function matchesFilter(t) {
   return true;
 }
 
+// ── Auth ─────────────────────────────────────────────────────────
+function checkAuth() {
+  if (localStorage.getItem('bo_auth') === 'ok') { init(); return; }
+  const overlay = document.createElement('div');
+  overlay.id = 'auth-overlay';
+  overlay.innerHTML = `
+    <div class="auth-box">
+      <div class="auth-logo">BLACKONYX</div>
+      <div class="auth-sub">R&amp;D Dashboard</div>
+      <input type="password" id="auth-input" class="auth-input" placeholder="비밀번호">
+      <div id="auth-error" class="auth-error" style="display:none">비밀번호가 올바르지 않습니다.</div>
+      <button class="auth-btn" id="auth-submit">접속</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  const inp = document.getElementById('auth-input');
+  inp.focus();
+  function tryAuth() {
+    if (inp.value === 'Iones2026!') {
+      localStorage.setItem('bo_auth', 'ok');
+      overlay.remove();
+      init();
+    } else {
+      document.getElementById('auth-error').style.display = 'block';
+      inp.value = ''; inp.focus();
+    }
+  }
+  document.getElementById('auth-submit').addEventListener('click', tryAuth);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') tryAuth(); });
+}
+
 // ── Init ─────────────────────────────────────────────────────────
 function showLoadError(msg) {
   const tbody = document.getElementById('task-tbody');
@@ -116,38 +150,47 @@ function checkAllReady() {
     if (!Object.keys(projects).length) { seedData(); return; }
   }
   renderSidebar();
-  renderTable();
-  updateSummary();
+  renderView();
 }
 
 function onRemoteChange() {
   if (!_ready.p || !_ready.s || !_ready.t) return;
   renderSidebar();
-  updateSummary();
   if (activeEditCell) { pendingRemoteRender = true; }
-  else renderTable();
+  else renderView();
   if (selectedTaskId) renderDetailRemote();
+}
+
+function renderView() {
+  if (currentView === 'calendar') renderCalendarView();
+  else if (currentView === 'gantt') renderGanttView();
+  else renderTable();
+}
+
+function setView(v) {
+  currentView = v;
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  document.getElementById('table-wrap').style.display   = v === 'list'     ? 'block' : 'none';
+  document.getElementById('calendar-view').style.display = v === 'calendar' ? 'block' : 'none';
+  document.getElementById('gantt-view').style.display   = v === 'gantt'    ? 'flex'  : 'none';
+  renderView();
 }
 
 function init() {
   firebase.initializeApp(firebaseConfig);
   db = firebase.database();
-
   _connectTimer = setTimeout(() =>
     showLoadError('Firebase 연결 시간 초과 — Database Rules를 확인하세요.'), 6000);
-
   const onErr = err => { clearTimeout(_connectTimer); showLoadError(`Firebase 접근 거부 (${err.code})`); };
 
   db.ref(`${DB_PATH}/projects`).on('value', snap => {
     projects = snap.val() || {};
     if (!_ready.p) { _ready.p = true; checkAllReady(); } else onRemoteChange();
   }, onErr);
-
   db.ref(`${DB_PATH}/subprojects`).on('value', snap => {
     subprojects = snap.val() || {};
     if (!_ready.s) { _ready.s = true; checkAllReady(); } else onRemoteChange();
   }, onErr);
-
   db.ref(`${DB_PATH}/tasks`).on('value', snap => {
     tasks = snap.val() || {};
     if (!_ready.t) { _ready.t = true; checkAllReady(); } else onRemoteChange();
@@ -171,7 +214,6 @@ function renderSidebar() {
   const nav = document.getElementById('sidebar-nav');
   if (!nav) return;
   nav.innerHTML = '';
-
   const sortedProjs = Object.entries(projects).sort(([,a],[,b]) => (a.order||0)-(b.order||0));
 
   sortedProjs.forEach(([pid, proj]) => {
@@ -181,10 +223,8 @@ function renderSidebar() {
     const isOpen   = !collapsed.has(`nav:${pid}`);
     const isActive = currentProjectId === pid && !currentSubProjectId;
     const cnt      = Object.values(tasks).filter(t => t.projectId === pid).length;
-
     const wrap = document.createElement('div');
 
-    // Project row
     const pRow = document.createElement('div');
     pRow.className = `nav-item ${isActive ? 'active' : ''}`;
     pRow.dataset.pid = pid;
@@ -203,7 +243,6 @@ function renderSidebar() {
           <span class="material-symbols-outlined" style="font-size:13px">delete</span>
         </button>
       </span>`;
-
     pRow.querySelector('.nav-label').addEventListener('dblclick', e => {
       e.stopPropagation();
       inlineRename(e.target, proj.name, n => db.ref(`${DB_PATH}/projects/${pid}/name`).set(n));
@@ -218,7 +257,6 @@ function renderSidebar() {
     });
     wrap.appendChild(pRow);
 
-    // Sub rows
     if (isOpen && subs.length) {
       const subWrap = document.createElement('div');
       subWrap.className = 'nav-subs';
@@ -253,7 +291,6 @@ function renderSidebar() {
     nav.appendChild(wrap);
   });
 
-  // + 프로젝트 추가
   const addDiv = document.createElement('div');
   addDiv.style.padding = '4px 10px';
   addDiv.innerHTML = `<button class="nav-add-btn" onclick="addProject()">
@@ -261,7 +298,6 @@ function renderSidebar() {
   </button>`;
   nav.appendChild(addDiv);
 
-  // DoE 섹션
   const doeDiv = document.createElement('div');
   doeDiv.innerHTML = `
     <div class="nav-divider"></div>
@@ -307,7 +343,7 @@ function selectNav(pid, sid) {
     else if (sid)          bc.textContent = `${projName(pid)} › ${subName(sid)}`;
     else                   bc.textContent = projName(pid);
   }
-  renderSidebar(); renderTable();
+  renderSidebar(); renderView();
 }
 
 function addProject() {
@@ -371,7 +407,6 @@ function renderTable() {
       .filter(([,t])=>t.projectId===pid)
       .map(([id,t])=>({id,...t}))
       .sort((a,b)=>(a.order||0)-(b.order||0));
-
     const subs = Object.entries(subprojects).filter(([,s])=>s.projectId===pid).sort(([,a],[,b])=>(a.order||0)-(b.order||0));
     const collKey = `p:${pid}`;
     const isColl  = collapsed.has(collKey);
@@ -400,12 +435,10 @@ function renderTable() {
     tbody.appendChild(pRow);
     if (isColl) return;
 
-    // ungrouped
     if (!currentSubProjectId) {
       allProjTasks.filter(t=>!t.subProjectId&&matchesFilter(t)).forEach(t=>tbody.appendChild(createTaskRow(t,false)));
     }
 
-    // sub groups
     subs.forEach(([sid, sub]) => {
       if (currentSubProjectId && currentSubProjectId!==sid) return;
       const gTasks = allProjTasks.filter(t=>t.subProjectId===sid&&matchesFilter(t));
@@ -439,6 +472,8 @@ function renderTable() {
 }
 
 // ── createTaskRow ─────────────────────────────────────────────────
+const DATE_FIELDS = new Set(['nbd', 'latestUpdate']);
+
 function createTaskRow(t, inGroup) {
   const si = statusInfo(t.status);
   const tr = document.createElement('tr');
@@ -471,8 +506,18 @@ function createTaskRow(t, inGroup) {
       if (cell.querySelector('input,textarea')) return;
       e.stopPropagation();
       const val = tasks[id]?.[field] || '';
-      const multi = ['refDetails','assignees','updateLog'].includes(field);
 
+      if (DATE_FIELDS.has(field)) {
+        activeEditCell = { taskId: id, field };
+        openDatePicker(cell, val, field === 'nbd', newVal => {
+          activeEditCell = null;
+          if (newVal !== val) updateTask(id, field, newVal);
+          else if (pendingRemoteRender) { pendingRemoteRender = false; renderTable(); }
+        });
+        return;
+      }
+
+      const multi = ['refDetails','assignees','updateLog'].includes(field);
       function done(newVal) {
         activeEditCell = null;
         if (newVal !== val) updateTask(id, field, newVal);
@@ -499,6 +544,370 @@ function createTaskRow(t, inGroup) {
     });
   });
   return tr;
+}
+
+// ── Date picker ──────────────────────────────────────────────────
+function openDatePicker(anchorEl, currentVal, allowTbd, onPick) {
+  document.getElementById('date-picker-popup')?.remove();
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  let viewY = today.getFullYear();
+  let viewM = today.getMonth();
+  if (currentVal && currentVal !== 'TBD') {
+    const d = new Date(currentVal + 'T00:00:00');
+    if (!isNaN(d)) { viewY = d.getFullYear(); viewM = d.getMonth(); }
+  }
+
+  const popup = document.createElement('div');
+  popup.id = 'date-picker-popup';
+  document.body.appendChild(popup);
+
+  function position() {
+    const r = anchorEl.getBoundingClientRect();
+    const top = r.bottom + 4 + 240 < window.innerHeight ? r.bottom + 4 : r.top - 244;
+    popup.style.cssText = `position:fixed;top:${top}px;left:${Math.min(r.left, window.innerWidth-220)}px;z-index:500`;
+  }
+
+  function build() {
+    const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+    const DAYS   = ['일','월','화','수','목','금','토'];
+    const selStr = (currentVal && currentVal !== 'TBD') ? currentVal : null;
+    const firstDow = new Date(viewY, viewM, 1).getDay();
+    const daysInMonth = new Date(viewY, viewM + 1, 0).getDate();
+
+    let cells = Array(firstDow).fill('<div></div>').join('');
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = `${viewY}-${String(viewM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const isT = (new Date(viewY,viewM,d).getTime() === today.getTime());
+      const isS = ds === selStr;
+      cells += `<div class="dp-day${isT?' dp-today':''}${isS?' dp-sel':''}" data-date="${ds}">${d}</div>`;
+    }
+
+    popup.innerHTML = `
+      <div class="dp-header">
+        <button class="dp-nav" data-nav="-1">&#8249;</button>
+        <span class="dp-title">${viewY}년 ${MONTHS[viewM]}</span>
+        <button class="dp-nav" data-nav="1">&#8250;</button>
+      </div>
+      <div class="dp-grid-head">${DAYS.map(d=>`<div>${d}</div>`).join('')}</div>
+      <div class="dp-grid">${cells}</div>
+      <div class="dp-footer">
+        ${allowTbd ? `<button class="dp-tbd" id="dp-tbd-btn">TBD</button>` : ''}
+        <button class="dp-clear" id="dp-clear-btn">지우기</button>
+      </div>`;
+
+    popup.querySelectorAll('[data-nav]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        viewM += parseInt(btn.dataset.nav);
+        if (viewM < 0) { viewM = 11; viewY--; }
+        if (viewM > 11) { viewM = 0; viewY++; }
+        build(); position();
+      });
+    });
+    popup.querySelectorAll('.dp-day').forEach(cell => {
+      cell.addEventListener('click', e => {
+        e.stopPropagation();
+        close(cell.dataset.date);
+      });
+    });
+    popup.querySelector('#dp-tbd-btn')?.addEventListener('click', e => { e.stopPropagation(); close('TBD'); });
+    popup.querySelector('#dp-clear-btn')?.addEventListener('click', e => { e.stopPropagation(); close(''); });
+  }
+
+  let closeHandler;
+  function close(val) {
+    popup.remove();
+    document.removeEventListener('click', closeHandler);
+    onPick(val);
+  }
+
+  build(); position();
+  setTimeout(() => {
+    closeHandler = e => {
+      if (!popup.contains(e.target)) {
+        popup.remove();
+        document.removeEventListener('click', closeHandler);
+        activeEditCell = null;
+        if (pendingRemoteRender) { pendingRemoteRender = false; renderView(); }
+      }
+    };
+    document.addEventListener('click', closeHandler);
+  }, 0);
+}
+
+// ── Calendar view ─────────────────────────────────────────────────
+function renderCalendarView() {
+  const wrap = document.getElementById('calendar-view');
+  if (!wrap) return;
+
+  const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const DAYS   = ['일','월','화','수','목','금','토'];
+  const today  = new Date(); today.setHours(0,0,0,0);
+
+  const firstOfMonth = new Date(calViewYear, calViewMonth, 1);
+  const firstDow = firstOfMonth.getDay();
+  const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+  const prevDays = new Date(calViewYear, calViewMonth, 0).getDate();
+
+  const STATUS_COLORS = {
+    'Not Started': { bg:'#f1edec', fg:'#46474a' },
+    'In Progress':  { bg:'#dbeafe', fg:'#1d4ed8' },
+    'Completed':    { bg:'#d1fae5', fg:'#065f46' },
+    'Delayed':      { bg:'#fee2e2', fg:'#991b1b' },
+    'On Hold':      { bg:'#fef3c7', fg:'#92400e' },
+  };
+
+  // Build date → tasks map
+  const dateMap = {};
+  const tbdTasks = [];
+  Object.entries(tasks).forEach(([id, t]) => {
+    if (!matchesFilter(t)) return;
+    if (!t.nbd || t.nbd === 'TBD') { tbdTasks.push({id,...t}); return; }
+    const [y,m] = t.nbd.split('-').map(Number);
+    if (y === calViewYear && m-1 === calViewMonth) {
+      const d = parseInt(t.nbd.split('-')[2]);
+      (dateMap[d] = dateMap[d]||[]).push({id,...t});
+    }
+  });
+
+  // Build grid cells
+  let cells = '';
+  const totalCells = Math.ceil((firstDow + daysInMonth) / 7) * 7;
+  for (let i = 0; i < totalCells; i++) {
+    let dayNum, inMonth = true;
+    if (i < firstDow) { dayNum = prevDays - firstDow + i + 1; inMonth = false; }
+    else if (i >= firstDow + daysInMonth) { dayNum = i - firstDow - daysInMonth + 1; inMonth = false; }
+    else { dayNum = i - firstDow + 1; }
+
+    const isToday = inMonth && new Date(calViewYear, calViewMonth, dayNum).getTime() === today.getTime();
+    const dayTasks = inMonth ? (dateMap[dayNum] || []) : [];
+    const chips = dayTasks.slice(0,3).map(t => {
+      const c = STATUS_COLORS[t.status] || STATUS_COLORS['Not Started'];
+      return `<div class="cal-chip" style="background:${c.bg};color:${c.fg}" onclick="openDetail('${t.id}')" title="${esc(t.actionItem)}">${esc(t.actionItem)}</div>`;
+    }).join('');
+    const extra = dayTasks.length > 3 ? `<div style="font-size:9px;color:#868380;padding:1px 4px">+${dayTasks.length-3}개</div>` : '';
+    cells += `<div class="cal-cell${!inMonth?' other-month':''}${isToday?' today':''}">
+      <div class="cal-date">${dayNum}</div>
+      ${chips}${extra}
+    </div>`;
+  }
+
+  // TBD section
+  const tbdHtml = tbdTasks.length ? `
+    <div class="cal-tbd-section">
+      <div class="cal-tbd-title">날짜 미정 (TBD) — ${tbdTasks.length}개</div>
+      <div class="cal-tbd-list">
+        ${tbdTasks.map(t => {
+          const c = STATUS_COLORS[t.status] || STATUS_COLORS['Not Started'];
+          return `<div class="cal-chip" style="background:${c.bg};color:${c.fg}" onclick="openDetail('${t.id}')" title="${esc(t.actionItem)}">${esc(t.actionItem)}</div>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  wrap.innerHTML = `
+    <div class="cal-header">
+      <button class="cal-nav-btn" id="cal-prev">&#8249;</button>
+      <div class="cal-title">${calViewYear}년 ${MONTHS[calViewMonth]}</div>
+      <button class="cal-nav-btn" id="cal-next">&#8250;</button>
+      <button class="cal-today-btn" id="cal-today">오늘</button>
+    </div>
+    <div class="cal-day-heads">${DAYS.map(d=>`<div class="cal-day-head">${d}</div>`).join('')}</div>
+    <div class="cal-grid">${cells}</div>
+    ${tbdHtml}`;
+
+  wrap.querySelector('#cal-prev').addEventListener('click', () => {
+    calViewMonth--; if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; }
+    renderCalendarView();
+  });
+  wrap.querySelector('#cal-next').addEventListener('click', () => {
+    calViewMonth++; if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; }
+    renderCalendarView();
+  });
+  wrap.querySelector('#cal-today').addEventListener('click', () => {
+    calViewYear = today.getFullYear(); calViewMonth = today.getMonth();
+    renderCalendarView();
+  });
+}
+
+// ── Gantt view ────────────────────────────────────────────────────
+function renderGanttView() {
+  const wrap = document.getElementById('gantt-view');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+
+  const DAY_W = 20; // px per day
+  const ROW_H = 36;
+  const PROJ_H = 28;
+  const HEADER_H = 40;
+
+  const STATUS_COLORS = {
+    'Not Started': '#868380',
+    'In Progress':  '#2563eb',
+    'Completed':    '#10b981',
+    'Delayed':      '#ef4444',
+    'On Hold':      '#f59e0b',
+  };
+
+  // Collect visible tasks
+  const sortedProjs = Object.entries(projects)
+    .sort(([,a],[,b])=>(a.order||0)-(b.order||0))
+    .filter(([pid])=>!currentProjectId || pid===currentProjectId);
+
+  const rows = []; // { type:'proj'|'task', pid, task, inGroup }
+  sortedProjs.forEach(([pid, proj]) => {
+    rows.push({ type:'proj', pid, name: proj.name });
+    const projTasks = Object.entries(tasks).filter(([,t])=>t.projectId===pid&&matchesFilter(t)).map(([id,t])=>({id,...t})).sort((a,b)=>(a.order||0)-(b.order||0));
+    projTasks.forEach(t => rows.push({ type:'task', task: t }));
+  });
+
+  // Date range
+  const today = new Date(); today.setHours(0,0,0,0);
+  let minD = new Date(today); minD.setDate(minD.getDate() - 30);
+  let maxD = new Date(today); maxD.setDate(maxD.getDate() + 90);
+
+  const taskRows = rows.filter(r=>r.type==='task');
+  taskRows.forEach(r => {
+    if (r.task.createdAt) {
+      const d = new Date(r.task.createdAt); d.setHours(0,0,0,0);
+      if (d < minD) minD = d;
+    }
+    if (r.task.nbd && r.task.nbd !== 'TBD') {
+      const d = new Date(r.task.nbd+'T00:00:00');
+      if (!isNaN(d) && d > maxD) { maxD = new Date(d); maxD.setDate(maxD.getDate()+7); }
+    }
+  });
+
+  const totalDays = Math.ceil((maxD - minD) / 86400000) + 1;
+  const timelineW = totalDays * DAY_W;
+  const todayOffset = Math.floor((today - minD) / 86400000);
+
+  function dayOffset(d) { return Math.floor((d - minD) / 86400000); }
+
+  // ── Left panel ──
+  const left = document.createElement('div');
+  left.className = 'gantt-left';
+  left.innerHTML = `<div class="gantt-header-row"><span class="gantt-header-label">항목</span></div>`;
+  const leftBody = document.createElement('div');
+  leftBody.className = 'gantt-left-body';
+  rows.forEach(r => {
+    if (r.type === 'proj') {
+      const el = document.createElement('div');
+      el.className = 'gantt-proj-row'; el.textContent = r.name;
+      leftBody.appendChild(el);
+    } else {
+      const si = statusInfo(r.task.status);
+      const el = document.createElement('div');
+      el.className = 'gantt-task-row';
+      el.innerHTML = `<span class="gantt-task-name" title="${esc(r.task.actionItem)}">${esc(r.task.actionItem)}</span>
+        <span class="status-badge ${si.cls}" style="cursor:default;font-size:10px">${si.label}</span>`;
+      leftBody.appendChild(el);
+    }
+  });
+  left.appendChild(leftBody);
+  wrap.appendChild(left);
+
+  // ── Right panel ──
+  const right = document.createElement('div');
+  right.className = 'gantt-right';
+  right.style.position = 'relative';
+
+  const timeline = document.createElement('div');
+  timeline.className = 'gantt-timeline';
+  timeline.style.cssText = `width:${timelineW}px;position:relative;`;
+
+  // Month headers
+  const monthHeader = document.createElement('div');
+  monthHeader.className = 'gantt-month-header';
+  monthHeader.style.cssText = `width:${timelineW}px;position:sticky;top:0;z-index:10;`;
+
+  let cur = new Date(minD);
+  while (cur <= maxD) {
+    const monthStart = new Date(cur.getFullYear(), cur.getMonth(), 1);
+    const monthEnd   = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
+    const startOff = Math.max(0, dayOffset(monthStart)) * DAY_W;
+    const endOff   = Math.min(totalDays, dayOffset(monthEnd)+1) * DAY_W;
+    const label = document.createElement('div');
+    label.className = 'gantt-month-label';
+    label.style.cssText = `left:${startOff}px;width:${endOff-startOff}px;`;
+    label.textContent = `${cur.getFullYear()}년 ${cur.getMonth()+1}월`;
+    monthHeader.appendChild(label);
+    cur = new Date(cur.getFullYear(), cur.getMonth()+1, 1);
+  }
+  timeline.appendChild(monthHeader);
+
+  // Day grid lines (only for month boundaries)
+  for (let d = 0; d < totalDays; d++) {
+    const dd = new Date(minD); dd.setDate(dd.getDate()+d);
+    if (dd.getDate() === 1) {
+      const line = document.createElement('div');
+      line.className = 'gantt-day-line';
+      line.style.left = (d * DAY_W) + 'px';
+      timeline.appendChild(line);
+    }
+  }
+
+  // Today line
+  if (todayOffset >= 0 && todayOffset < totalDays) {
+    const tl = document.createElement('div');
+    tl.className = 'gantt-today-line';
+    tl.style.left = (todayOffset * DAY_W + DAY_W/2) + 'px';
+    timeline.appendChild(tl);
+  }
+
+  // Bars
+  let rowTop = HEADER_H;
+  rows.forEach(r => {
+    if (r.type === 'proj') { rowTop += PROJ_H; return; }
+    const t = r.task;
+    const barRow = document.createElement('div');
+    barRow.className = 'gantt-bar-row';
+    barRow.style.cssText = `top:${rowTop}px;left:0;right:0;height:${ROW_H}px;`;
+
+    if (t.nbd && t.nbd !== 'TBD' && t.createdAt) {
+      const startD = new Date(t.createdAt); startD.setHours(0,0,0,0);
+      const endD   = new Date(t.nbd+'T00:00:00');
+      if (!isNaN(endD)) {
+        let sx = dayOffset(startD) * DAY_W;
+        let ex = (dayOffset(endD) + 1) * DAY_W;
+        if (ex < 0 || sx > timelineW) { rowTop += ROW_H; return; }
+        sx = Math.max(0, sx); ex = Math.min(timelineW, ex);
+        const bar = document.createElement('div');
+        bar.className = 'gantt-bar';
+        bar.style.cssText = `position:absolute;left:${sx}px;width:${Math.max(4,ex-sx)}px;background:${STATUS_COLORS[t.status]||'#868380'};`;
+        bar.title = `${t.actionItem}\n${t.nbd}까지`;
+        bar.addEventListener('click', () => openDetail(t.id));
+        barRow.appendChild(bar);
+      }
+    } else if (t.createdAt) {
+      const startD = new Date(t.createdAt); startD.setHours(0,0,0,0);
+      let sx = dayOffset(startD) * DAY_W;
+      if (sx < timelineW) {
+        sx = Math.max(0, sx);
+        const dash = document.createElement('div');
+        dash.className = 'gantt-tbd-dash';
+        dash.style.cssText = `position:absolute;left:${sx}px;width:60px;top:50%;transform:translateY(-50%);`;
+        dash.title = `${t.actionItem} (TBD)`;
+        barRow.appendChild(dash);
+      }
+    }
+    timeline.appendChild(barRow);
+    rowTop += ROW_H;
+  });
+
+  timeline.style.height = rowTop + 'px';
+  right.appendChild(timeline);
+  wrap.appendChild(right);
+
+  // Sync scroll
+  right.addEventListener('scroll', () => { leftBody.scrollTop = right.scrollTop; });
+  leftBody.addEventListener('scroll', () => { right.scrollTop = leftBody.scrollTop; });
+
+  // Scroll to today
+  setTimeout(() => {
+    const scrollTo = Math.max(0, todayOffset * DAY_W - right.clientWidth / 2);
+    right.scrollLeft = scrollTo;
+  }, 0);
 }
 
 // ── Status picker ─────────────────────────────────────────────────
@@ -538,7 +947,6 @@ function addTask(data) {
   const maxOrd = siblings.reduce((m,t)=>Math.max(m,t.order||0),-1);
   db.ref(`${DB_PATH}/tasks/${newId('task')}`).set({...data, order:maxOrd+1, createdAt:Date.now(), updatedAt:Date.now()});
 }
-
 function toggleCollapse(key) { collapsed.has(key)?collapsed.delete(key):collapsed.add(key); renderTable(); }
 
 // ── Add modal ─────────────────────────────────────────────────────
@@ -620,7 +1028,18 @@ function renderDetail() {
     el.addEventListener('click', ()=>{
       if (el.querySelector('input,textarea')) return;
       const val=tasks[did]?.[field]||'';
-      function done(nv){activeEditCell=null;if(nv!==val)updateTask(did,field,nv);else{if(pendingRemoteRender){pendingRemoteRender=false;renderTable();}renderDetail();}}
+
+      if (DATE_FIELDS.has(field)) {
+        activeEditCell = { taskId: did, field };
+        openDatePicker(el, val, field === 'nbd', newVal => {
+          activeEditCell = null;
+          if (newVal !== val) updateTask(did, field, newVal);
+          else { if (pendingRemoteRender) { pendingRemoteRender = false; renderView(); } renderDetail(); }
+        });
+        return;
+      }
+
+      function done(nv){activeEditCell=null;if(nv!==val)updateTask(did,field,nv);else{if(pendingRemoteRender){pendingRemoteRender=false;renderView();}renderDetail();}}
       activeEditCell={taskId:did,field};
       if(multi){const ta=document.createElement('textarea');ta.className='cell-textarea';ta.value=val;el.innerHTML='';el.appendChild(ta);ta.focus();ta.addEventListener('blur',()=>done(ta.value));ta.addEventListener('keydown',e=>{if(e.key==='Escape'){activeEditCell=null;renderDetail();}});}
       else{const inp=document.createElement('input');inp.className='cell-input';inp.value=val;el.innerHTML='';el.appendChild(inp);inp.focus();inp.select();inp.addEventListener('blur',()=>done(inp.value));inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){activeEditCell=null;renderDetail();}});}
@@ -635,23 +1054,6 @@ function renderDetailRemote() {
     if(el.querySelector('input,textarea')||el.dataset.field==='status') return;
     el.textContent=t[el.dataset.field]||'—';
   });
-}
-
-// ── Summary ───────────────────────────────────────────────────────
-function updateSummary() {
-  const all=Object.values(tasks);
-  const cnt={'Completed':0,'In Progress':0,'Delayed':0,'On Hold':0,'Not Started':0};
-  all.forEach(t=>{cnt[t.status]=(cnt[t.status]||0)+1;});
-  const total=all.length||1;
-  const pb=document.getElementById('progress-bar-wrap');
-  if(pb) pb.innerHTML=`<div class="pb-completed" style="width:${cnt['Completed']/total*100}%"></div><div class="pb-inprogress" style="width:${cnt['In Progress']/total*100}%"></div><div class="pb-delayed" style="width:${cnt['Delayed']/total*100}%"></div><div class="pb-onhold" style="width:${cnt['On Hold']/total*100}%"></div>`;
-  const chips=document.getElementById('summary-chips');
-  if(chips) chips.innerHTML=`
-    <span class="chip" style="background:#d1fae5;color:#065f46">완료 ${cnt['Completed']}</span>
-    <span class="chip" style="background:#dbeafe;color:#1d4ed8">진행 ${cnt['In Progress']}</span>
-    <span class="chip" style="background:#fee2e2;color:#991b1b">지연 ${cnt['Delayed']}</span>
-    <span class="chip" style="background:#f1edec;color:#46474a">미시작 ${cnt['Not Started']}</span>
-    <span class="chip" style="background:#fef3c7;color:#92400e">보류 ${cnt['On Hold']}</span>`;
 }
 
 // ── Export ────────────────────────────────────────────────────────
@@ -672,11 +1074,15 @@ function exportPDF(){window.print();}
 
 // ── Events ────────────────────────────────────────────────────────
 function setupEvents() {
-  document.getElementById('search-input').addEventListener('input',e=>{searchTerm=e.target.value;renderTable();});
-  document.getElementById('filter-status').addEventListener('change',e=>{filterStatus=e.target.value;renderTable();});
+  document.getElementById('search-input').addEventListener('input',e=>{searchTerm=e.target.value;renderView();});
+  document.getElementById('filter-status').addEventListener('change',e=>{filterStatus=e.target.value;renderView();});
   document.getElementById('modal-overlay').addEventListener('click',e=>{if(e.target.id==='modal-overlay')closeAddModal();});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeAddModal();closeDetail();}});
-  document.getElementById('nav-all').addEventListener('click',()=>{currentProjectId=null;currentSubProjectId=null;document.getElementById('ws-breadcrumb').textContent='ALL';renderSidebar();renderTable();});
+  document.getElementById('nav-all').addEventListener('click',()=>{
+    currentProjectId=null;currentSubProjectId=null;
+    document.getElementById('ws-breadcrumb').textContent='ALL';
+    renderSidebar();renderView();
+  });
   document.getElementById('btn-export-excel').addEventListener('click',exportExcel);
   document.getElementById('btn-export-pdf').addEventListener('click',exportPDF);
   document.getElementById('btn-add-task').addEventListener('click',()=>{
@@ -686,6 +1092,10 @@ function setupEvents() {
   document.getElementById('btn-confirm-add').addEventListener('click',confirmAdd);
   document.getElementById('btn-cancel-add').addEventListener('click',closeAddModal);
   document.getElementById('add-action').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey))confirmAdd();});
+
+  document.querySelectorAll('.view-btn').forEach(btn => {
+    btn.addEventListener('click', () => setView(btn.dataset.view));
+  });
 }
 
-init();
+checkAuth();

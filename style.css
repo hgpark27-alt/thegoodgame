@@ -191,3 +191,76 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: #fdf8f8; col
 @media (max-width: 900px) {
   #detail-panel { display: none !important; }
 }
+
+/* ── Auth overlay ── */
+#auth-overlay { position: fixed; inset: 0; background: #fdf8f8; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.auth-box { background: #fff; border: 1px solid #c7c6ca; border-radius: 4px; padding: 40px 36px; width: 340px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 4px 24px rgba(0,0,0,.08); }
+.auth-logo { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: #000; text-align: center; }
+.auth-sub { font-size: 12px; color: #76777b; text-align: center; margin-top: -8px; }
+.auth-input { padding: 10px 12px; border: 1px solid #c7c6ca; border-radius: 2px; font-family: inherit; font-size: 14px; color: #1c1b1b; outline: none; transition: border-color .12s; letter-spacing: .06em; }
+.auth-input:focus { border-color: #000; }
+.auth-btn { padding: 10px; background: #000; color: #fff; border: none; border-radius: 2px; font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; transition: opacity .12s; }
+.auth-btn:hover { opacity: .8; }
+.auth-error { font-size: 11px; color: #ef4444; text-align: center; }
+
+/* ── Date picker ── */
+#date-picker-popup { position: fixed; z-index: 500; background: #fff; border: 1px solid #c7c6ca; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.12); width: 216px; user-select: none; }
+.dp-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid #f1edec; }
+.dp-title { font-size: 12px; font-weight: 700; color: #1c1b1b; }
+.dp-nav { border: none; background: transparent; cursor: pointer; color: #46474a; font-size: 18px; padding: 0 6px; border-radius: 2px; line-height: 1; }
+.dp-nav:hover { background: #f1edec; }
+.dp-grid-head { display: grid; grid-template-columns: repeat(7,1fr); padding: 4px 6px 0; }
+.dp-grid-head > div { text-align: center; font-size: 9px; font-weight: 700; color: #868380; padding: 2px 0; }
+.dp-grid { display: grid; grid-template-columns: repeat(7,1fr); padding: 2px 6px 6px; gap: 1px; }
+.dp-day { text-align: center; font-size: 11px; color: #46474a; padding: 4px 2px; border-radius: 2px; cursor: pointer; transition: background .1s; }
+.dp-day:hover { background: #f1edec; }
+.dp-today { font-weight: 700; color: #2563eb; }
+.dp-sel { background: #000 !important; color: #fff !important; border-radius: 2px; }
+.dp-footer { display: flex; gap: 6px; padding: 6px 8px 8px; border-top: 1px solid #f1edec; }
+.dp-tbd { flex: 1; padding: 4px 8px; border: 1px solid #c7c6ca; border-radius: 2px; font-family: inherit; font-size: 11px; font-weight: 700; background: transparent; cursor: pointer; color: #46474a; }
+.dp-tbd:hover { background: #f1edec; }
+.dp-clear { flex: 1; padding: 4px 8px; border: 1px solid #f1edec; border-radius: 2px; font-family: inherit; font-size: 11px; background: transparent; cursor: pointer; color: #868380; }
+.dp-clear:hover { background: #f1edec; }
+
+/* ── Calendar view ── */
+#calendar-view { font-family: inherit; }
+.cal-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.cal-title { font-size: 18px; font-weight: 700; color: #000; flex: 1; }
+.cal-nav-btn { border: 1px solid #c7c6ca; background: #fff; border-radius: 2px; cursor: pointer; padding: 5px 10px; font-size: 12px; font-weight: 600; color: #46474a; font-family: inherit; transition: background .12s; }
+.cal-nav-btn:hover { background: #f1edec; }
+.cal-today-btn { border: 1px solid #c7c6ca; background: #fff; border-radius: 2px; cursor: pointer; padding: 5px 12px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #46474a; font-family: inherit; }
+.cal-today-btn:hover { background: #f1edec; }
+.cal-day-heads { display: grid; grid-template-columns: repeat(7,1fr); gap: 1px; margin-bottom: 4px; }
+.cal-day-head { text-align: center; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #868380; padding: 4px 0; }
+.cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 1px; background: #e5e2e1; border: 1px solid #e5e2e1; border-radius: 2px; overflow: hidden; }
+.cal-cell { background: #fff; min-height: 96px; padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+.cal-cell.other-month { background: #faf7f7; }
+.cal-cell.today { background: #fffbe6; }
+.cal-date { font-size: 11px; font-weight: 600; color: #46474a; padding: 1px 3px; border-radius: 2px; align-self: flex-start; }
+.cal-cell.today .cal-date { background: #000; color: #fff; }
+.cal-chip { font-size: 10px; font-weight: 600; padding: 2px 5px; border-radius: 3px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.4; }
+.cal-chip:hover { opacity: .85; }
+.cal-tbd-section { margin-top: 20px; }
+.cal-tbd-title { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #868380; margin-bottom: 8px; }
+.cal-tbd-list { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ── Gantt view ── */
+#gantt-view { display: flex; font-family: inherit; }
+.gantt-left { width: 280px; min-width: 280px; border-right: 1px solid #e5e2e1; overflow: hidden; display: flex; flex-direction: column; }
+.gantt-right { flex: 1; overflow-x: auto; overflow-y: auto; position: relative; }
+.gantt-header-row { height: 40px; background: #f1edec; border-bottom: 1px solid #c7c6ca; display: flex; align-items: flex-end; padding: 0 10px 4px; flex-shrink: 0; }
+.gantt-header-label { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #868380; }
+.gantt-left-body { overflow-y: auto; flex: 1; }
+.gantt-task-row { height: 36px; display: flex; align-items: center; padding: 0 10px; gap: 8px; border-bottom: 1px solid #f1edec; }
+.gantt-task-row:hover { background: #fdf8f8; }
+.gantt-task-name { font-size: 11px; color: #1c1b1b; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gantt-proj-row { height: 28px; display: flex; align-items: center; padding: 0 10px; background: #ebe7e7; border-bottom: 1px solid #c7c6ca; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #46474a; }
+.gantt-timeline { position: relative; }
+.gantt-month-header { position: sticky; top: 0; height: 40px; background: #f1edec; border-bottom: 1px solid #c7c6ca; display: flex; z-index: 10; }
+.gantt-month-label { position: absolute; top: 0; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; letter-spacing: .04em; color: #868380; border-right: 1px solid #e5e2e1; }
+.gantt-day-line { position: absolute; top: 40px; bottom: 0; width: 1px; background: #f1edec; }
+.gantt-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #ef4444; opacity: .6; z-index: 5; pointer-events: none; }
+.gantt-bar-row { height: 36px; position: absolute; display: flex; align-items: center; }
+.gantt-bar { height: 18px; border-radius: 3px; opacity: .85; cursor: pointer; transition: opacity .1s; min-width: 4px; }
+.gantt-bar:hover { opacity: 1; }
+.gantt-tbd-dash { height: 3px; border-radius: 2px; opacity: .5; background: repeating-linear-gradient(90deg,#868380 0,#868380 4px,transparent 4px,transparent 8px); min-width: 40px; }

@@ -24,14 +24,6 @@
 <aside id="sidebar">
   <div class="logo">BLACKONYX</div>
 
-  <div class="user-block">
-    <div class="user-avatar">PM</div>
-    <div>
-      <div class="user-name">박혜근 선임</div>
-      <div class="user-role">R&amp;D PM · Next-Gen</div>
-    </div>
-  </div>
-
   <button class="new-btn" onclick="openAddModal(currentProjectId&&currentProjectId!=='__doe__'?currentProjectId:(Object.keys(projects)[0]||''),'')">
     <span class="material-symbols-outlined" style="font-size:16px">add</span>
     새 항목 추가
@@ -58,12 +50,6 @@
     </div>
   </nav>
 
-  <!-- Summary -->
-  <div style="padding:12px 16px;border-top:1px solid #c7c6ca">
-    <div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#868380;margin-bottom:6px">전체 진행률</div>
-    <div id="progress-bar-wrap" style="display:flex;height:4px;background:#e5e2e1;border-radius:2px;overflow:hidden"></div>
-    <div id="summary-chips" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px"></div>
-  </div>
 </aside>
 
 <!-- ── Main ── -->
@@ -106,13 +92,24 @@
         <option value="Delayed">지연</option>
         <option value="On Hold">보류</option>
       </select>
+      <div class="view-toggle">
+        <button class="view-btn active" data-view="list">
+          <span class="material-symbols-outlined" style="font-size:13px">view_list</span> 목록
+        </button>
+        <button class="view-btn" data-view="calendar">
+          <span class="material-symbols-outlined" style="font-size:13px">calendar_month</span> 달력
+        </button>
+        <button class="view-btn" data-view="gantt">
+          <span class="material-symbols-outlined" style="font-size:13px">view_timeline</span> 간트
+        </button>
+      </div>
     </div>
   </div>
 
   <!-- Table + Detail panel -->
   <div style="display:flex;flex:1;overflow:hidden">
     <div id="table-wrap" style="flex:1;overflow:auto">
-      <table id="task-table">
+      <table id="task-table" style="display:table">
         <thead>
           <tr>
             <th style="min-width:280px">Action Item</th>
@@ -131,6 +128,10 @@
       </table>
     </div>
 
+    <!-- Calendar view -->
+    <div id="calendar-view" style="flex:1;overflow:auto;display:none;padding:20px 24px"></div>
+    <!-- Gantt view -->
+    <div id="gantt-view" style="flex:1;overflow:hidden;display:none"></div>
     <!-- Detail panel -->
     <div id="detail-panel"></div>
   </div>
