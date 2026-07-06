@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BLACKONYX | R&D Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    .selected-task td { background: #f0f4ff !important; }
+    @media print {
+      #sidebar, #topbar .topbar-btn, .ws-btn, .row-actions, #detail-panel { display:none!important; }
+      #main { margin-left: 0; }
+      body { overflow: visible; height: auto; }
+      #table-wrap { overflow: visible; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<aside id="sidebar">
+  <div class="logo">BLACKONYX</div>
+
+  <div class="user-block">
+    <div class="user-avatar">PM</div>
+    <div>
+      <div class="user-name">박혜근 선임</div>
+      <div class="user-role">R&amp;D PM · Next-Gen</div>
+    </div>
+  </div>
+
+  <button class="new-btn" onclick="openAddModal(currentProject||'Blackonyx','')">
+    <span class="material-symbols-outlined" style="font-size:16px">add</span>
+    새 항목 추가
+  </button>
+
+  <nav style="flex:1;overflow-y:auto;padding:0 0 8px">
+    <div class="nav-section">Projects</div>
+    <div class="nav-item active" id="nav-all" style="margin-bottom:2px">
+      <span class="material-symbols-outlined mat-icon">grid_view</span>
+      <span>전체 보기</span>
+    </div>
+    <div class="nav-item" data-project="Blackonyx">
+      <span class="material-symbols-outlined mat-icon">science</span>
+      <span>Blackonyx</span>
+    </div>
+    <div class="nav-item" data-project="Bi-layer">
+      <span class="material-symbols-outlined mat-icon">layers</span>
+      <span>Bi-layer</span>
+    </div>
+    <div class="nav-item" data-project="PVD">
+      <span class="material-symbols-outlined mat-icon">memory</span>
+      <span>PVD</span>
+    </div>
+
+    <div class="nav-divider"></div>
+    <div class="nav-section">Sub-Projects</div>
+    <div class="nav-item" data-project="Bi-layer" style="padding-left:28px;font-size:11px">
+      <span class="material-symbols-outlined mat-icon" style="font-size:15px">layers</span>
+      <span>Hardmasking</span>
+    </div>
+    <div class="nav-item" style="padding-left:28px;font-size:11px;opacity:0.5;cursor:default">
+      <span class="material-symbols-outlined mat-icon" style="font-size:15px">settings_input_component</span>
+      <span>공정 관련</span>
+    </div>
+    <div class="nav-item" style="padding-left:28px;font-size:11px;opacity:0.5;cursor:default">
+      <span class="material-symbols-outlined mat-icon" style="font-size:15px">recycling</span>
+      <span>Powder 재활용</span>
+    </div>
+
+    <div class="nav-divider"></div>
+    <div class="nav-section">System</div>
+    <div class="nav-item" onclick="exportExcel()">
+      <span class="material-symbols-outlined mat-icon">download</span>
+      <span>Excel 내보내기</span>
+    </div>
+    <div class="nav-item" onclick="exportPDF()">
+      <span class="material-symbols-outlined mat-icon">print</span>
+      <span>PDF 출력</span>
+    </div>
+  </nav>
+
+  <!-- Summary -->
+  <div style="padding:12px 16px;border-top:1px solid #c7c6ca">
+    <div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#868380;margin-bottom:6px">전체 진행률</div>
+    <div id="progress-bar-wrap" style="display:flex;height:4px;background:#e5e2e1;border-radius:2px;overflow:hidden"></div>
+    <div id="summary-chips" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px"></div>
+  </div>
+</aside>
+
+<!-- ── Main ── -->
+<main id="main">
+
+  <!-- Top bar -->
+  <header id="topbar">
+    <div id="search-wrap">
+      <span class="material-symbols-outlined mat-icon">search</span>
+      <input id="search-input" type="text" placeholder="액션 아이템, 담당자, 내용 검색...">
+    </div>
+    <span style="flex:1"></span>
+    <button class="topbar-btn" id="btn-export-excel" title="Excel 다운로드">
+      <span class="material-symbols-outlined" style="font-size:20px">table_view</span>
+    </button>
+    <button class="topbar-btn" id="btn-export-pdf" title="PDF 출력">
+      <span class="material-symbols-outlined" style="font-size:20px">print</span>
+    </button>
+    <div class="topbar-divider"></div>
+    <div style="width:30px;height:30px;border-radius:50%;background:#e5e2e1;border:1px solid #c7c6ca;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#46474a">PM</div>
+  </header>
+
+  <!-- Workspace header -->
+  <div id="ws-header">
+    <div class="breadcrumb">PROJECTS › <span id="ws-breadcrumb">ALL</span></div>
+    <div class="ws-title">
+      Next-Gen Coating Development
+      <span style="font-size:13px;font-weight:400;color:#76777b">SPS · BLACKONYX · PVD</span>
+    </div>
+    <div class="ws-actions">
+      <button class="ws-btn primary" id="btn-add-task">
+        <span class="material-symbols-outlined" style="font-size:14px">add</span>
+        새 항목
+      </button>
+      <select class="filter-select" id="filter-status">
+        <option value="">모든 상태</option>
+        <option value="Not Started">미시작</option>
+        <option value="In Progress">진행중</option>
+        <option value="Completed">완료</option>
+        <option value="Delayed">지연</option>
+        <option value="On Hold">보류</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Table + Detail panel -->
+  <div style="display:flex;flex:1;overflow:hidden">
+    <div id="table-wrap" style="flex:1;overflow:auto">
+      <table id="task-table">
+        <thead>
+          <tr>
+            <th style="min-width:280px">Action Item</th>
+            <th style="min-width:180px">Reference Details</th>
+            <th style="min-width:130px">담당자</th>
+            <th style="min-width:100px">NBD</th>
+            <th style="min-width:110px">Status</th>
+            <th style="min-width:100px">Latest Update</th>
+            <th style="min-width:160px">Update Log</th>
+            <th style="width:60px"></th>
+          </tr>
+        </thead>
+        <tbody id="task-tbody">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:#868380;font-size:13px">데이터 로딩 중...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Detail panel -->
+    <div id="detail-panel"></div>
+  </div>
+</main>
+
+<!-- ── Add Modal ── -->
+<div id="modal-overlay" class="hidden">
+  <div class="modal-box">
+    <div class="modal-title">새 항목 추가</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="modal-field">
+        <div class="modal-label">프로젝트 *</div>
+        <select class="modal-select" id="add-project">
+          <option>Blackonyx</option>
+          <option>Bi-layer</option>
+          <option>PVD</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <div class="modal-label">그룹 (선택)</div>
+        <input class="modal-input" id="add-group" type="text" placeholder="예: Al2O3 + YOF">
+      </div>
+    </div>
+
+    <div class="modal-field">
+      <div class="modal-label">Action Item *</div>
+      <input class="modal-input" id="add-action" type="text" placeholder="할 일을 입력하세요" autocomplete="off">
+    </div>
+
+    <div class="modal-field">
+      <div class="modal-label">Reference Details</div>
+      <textarea class="modal-textarea" id="add-ref" placeholder="상세 내용, 조건, 사양 등..."></textarea>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="modal-field">
+        <div class="modal-label">담당자</div>
+        <textarea class="modal-textarea" id="add-assignees" placeholder="이름 (줄바꿈으로 여러명)" style="min-height:60px"></textarea>
+      </div>
+      <div class="modal-field">
+        <div class="modal-label">NBD</div>
+        <input class="modal-input" id="add-nbd" type="text" placeholder="2026-07-15 또는 TBD">
+        <div class="modal-label" style="margin-top:10px">Status</div>
+        <select class="modal-select" id="add-status">
+          <option value="Not Started">⚪ 미시작</option>
+          <option value="In Progress">🔵 진행중</option>
+          <option value="Completed">🟢 완료</option>
+          <option value="Delayed">🔴 지연</option>
+          <option value="On Hold">🟡 보류</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="modal-field">
+        <div class="modal-label">Latest Update (날짜)</div>
+        <input class="modal-input" id="add-update" type="text" placeholder="2026-07-06">
+      </div>
+      <div class="modal-field">
+        <div class="modal-label">Update Log</div>
+        <textarea class="modal-textarea" id="add-log" placeholder="업데이트 내용..." style="min-height:48px"></textarea>
+      </div>
+    </div>
+
+    <div class="modal-btns">
+      <button class="modal-btn ghost" id="btn-cancel-add">취소</button>
+      <button class="modal-btn primary" id="btn-confirm-add">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<!-- SheetJS for Excel export -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
