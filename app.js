@@ -765,10 +765,10 @@ function renderGanttView() {
   if (!wrap) return;
   wrap.innerHTML = '';
 
-  const DAY_W = 20; // px per day
-  const ROW_H = 36;
+  const DAY_W  = 24;
+  const ROW_H  = 38;
   const PROJ_H = 28;
-  const HEADER_H = 40;
+  const HEAD_H = 56; // month row + week row
 
   const STATUS_COLORS = {
     'Not Started': '#868380',
@@ -778,163 +778,239 @@ function renderGanttView() {
     'On Hold':      '#f59e0b',
   };
 
-  // Collect visible tasks
-  const sortedProjs = Object.entries(projects)
-    .sort(([,a],[,b])=>(a.order||0)-(b.order||0))
-    .filter(([pid])=>!currentProjectId || pid===currentProjectId);
-
-  const rows = []; // { type:'proj'|'task', pid, task, inGroup }
-  sortedProjs.forEach(([pid, proj]) => {
-    rows.push({ type:'proj', pid, name: proj.name });
-    const projTasks = Object.entries(tasks).filter(([,t])=>t.projectId===pid&&matchesFilter(t)).map(([id,t])=>({id,...t})).sort((a,b)=>(a.order||0)-(b.order||0));
-    projTasks.forEach(t => rows.push({ type:'task', task: t }));
-  });
-
-  // Date range
   const today = new Date(); today.setHours(0,0,0,0);
-  let minD = new Date(today); minD.setDate(minD.getDate() - 30);
-  let maxD = new Date(today); maxD.setDate(maxD.getDate() + 90);
 
-  const taskRows = rows.filter(r=>r.type==='task');
-  taskRows.forEach(r => {
-    if (r.task.createdAt) {
-      const d = new Date(r.task.createdAt); d.setHours(0,0,0,0);
-      if (d < minD) minD = d;
+  // Date window: today-14 days to today+120 days, expanded to include all NBDs
+  let minD = new Date(today); minD.setDate(minD.getDate() - 14);
+  let maxD = new Date(today); maxD.setDate(maxD.getDate() + 120);
+
+  // Collect rows
+  const sortedProjs = Object.entries(projects).sort(([,a],[,b])=>(a.order||0)-(b.order||0));
+  const rows = [];
+  const tbdRows = [];
+
+  sortedProjs.forEach(([pid, proj]) => {
+    const projTasks = Object.entries(tasks)
+      .filter(([,t])=>t.projectId===pid && matchesFilter(t))
+      .map(([id,t])=>({id,...t}))
+      .sort((a,b)=>(a.order||0)-(b.order||0));
+    if (!projTasks.length) return;
+
+    const datedTasks = projTasks.filter(t=>t.nbd&&t.nbd!=='TBD');
+    const tbdTasks   = projTasks.filter(t=>!t.nbd||t.nbd==='TBD');
+
+    if (datedTasks.length) {
+      rows.push({ type:'proj', name: proj.name });
+      datedTasks.forEach(t => {
+        const endD = new Date(t.nbd+'T00:00:00');
+        if (!isNaN(endD) && endD > maxD) { maxD = new Date(endD); maxD.setDate(maxD.getDate()+14); }
+        rows.push({ type:'task', task:t });
+      });
     }
-    if (r.task.nbd && r.task.nbd !== 'TBD') {
-      const d = new Date(r.task.nbd+'T00:00:00');
-      if (!isNaN(d) && d > maxD) { maxD = new Date(d); maxD.setDate(maxD.getDate()+7); }
-    }
+    tbdTasks.forEach(t => tbdRows.push({ task:t, projName: proj.name }));
   });
 
   const totalDays = Math.ceil((maxD - minD) / 86400000) + 1;
   const timelineW = totalDays * DAY_W;
-  const todayOffset = Math.floor((today - minD) / 86400000);
-
-  function dayOffset(d) { return Math.floor((d - minD) / 86400000); }
+  function dayOff(d) { return Math.floor((d - minD) / 86400000); }
+  const todayOff = dayOff(today);
 
   // ── Left panel ──
   const left = document.createElement('div');
   left.className = 'gantt-left';
-  left.innerHTML = `<div class="gantt-header-row"><span class="gantt-header-label">항목</span></div>`;
+  left.style.cssText = 'width:300px;min-width:300px;';
+  left.innerHTML = `<div class="gantt-header-row" style="height:${HEAD_H}px;display:flex;align-items:flex-end;padding:0 10px 6px">
+    <span class="gantt-header-label">항목 / 담당자</span>
+  </div>`;
   const leftBody = document.createElement('div');
   leftBody.className = 'gantt-left-body';
+
   rows.forEach(r => {
     if (r.type === 'proj') {
       const el = document.createElement('div');
-      el.className = 'gantt-proj-row'; el.textContent = r.name;
+      el.className = 'gantt-proj-row';
+      el.textContent = r.name;
       leftBody.appendChild(el);
     } else {
-      const si = statusInfo(r.task.status);
+      const t = r.task;
+      const si = statusInfo(t.status);
+      const nbdD = new Date(t.nbd+'T00:00:00');
+      const isOverdue = nbdD < today && t.status !== 'Completed';
       const el = document.createElement('div');
       el.className = 'gantt-task-row';
-      el.innerHTML = `<span class="gantt-task-name" title="${esc(r.task.actionItem)}">${esc(r.task.actionItem)}</span>
-        <span class="status-badge ${si.cls}" style="cursor:default;font-size:10px">${si.label}</span>`;
+      el.style.cursor = 'pointer';
+      el.innerHTML = `
+        <div style="flex:1;min-width:0">
+          <div class="gantt-task-name${isOverdue?' gantt-overdue':''}" title="${esc(t.actionItem)}">${esc(t.actionItem)}</div>
+          <div style="font-size:10px;color:#868380;margin-top:1px">${esc(fmtAssignees(t.assignees))}</div>
+        </div>
+        <span class="status-badge ${si.cls}" style="cursor:default;font-size:9px;flex-shrink:0">${si.label}</span>`;
+      el.addEventListener('click', () => openDetail(t.id));
       leftBody.appendChild(el);
     }
   });
+
+  // TBD section in left
+  if (tbdRows.length) {
+    const tbdHead = document.createElement('div');
+    tbdHead.className = 'gantt-proj-row';
+    tbdHead.style.cssText += ';background:#fef3c7;color:#92400e;font-size:10px';
+    tbdHead.textContent = `TBD 미정 (${tbdRows.length}건)`;
+    leftBody.appendChild(tbdHead);
+    tbdRows.forEach(r => {
+      const t = r.task;
+      const si = statusInfo(t.status);
+      const el = document.createElement('div');
+      el.className = 'gantt-task-row';
+      el.style.cursor = 'pointer';
+      el.innerHTML = `
+        <div style="flex:1;min-width:0">
+          <div class="gantt-task-name" title="${esc(t.actionItem)}">${esc(t.actionItem)}</div>
+          <div style="font-size:10px;color:#868380;margin-top:1px">${r.projName}</div>
+        </div>
+        <span class="status-badge ${si.cls}" style="cursor:default;font-size:9px;flex-shrink:0">${si.label}</span>`;
+      el.addEventListener('click', () => openDetail(t.id));
+      leftBody.appendChild(el);
+    });
+  }
+
   left.appendChild(leftBody);
   wrap.appendChild(left);
 
   // ── Right panel ──
   const right = document.createElement('div');
   right.className = 'gantt-right';
-  right.style.position = 'relative';
 
-  const timeline = document.createElement('div');
-  timeline.className = 'gantt-timeline';
-  timeline.style.cssText = `width:${timelineW}px;position:relative;`;
+  const tl = document.createElement('div');
+  tl.className = 'gantt-timeline';
+  tl.style.cssText = `width:${timelineW}px;position:relative;min-height:100%;`;
 
-  // Month headers
-  const monthHeader = document.createElement('div');
-  monthHeader.className = 'gantt-month-header';
-  monthHeader.style.cssText = `width:${timelineW}px;position:sticky;top:0;z-index:10;`;
+  // Month + week header
+  const hdr = document.createElement('div');
+  hdr.style.cssText = `position:sticky;top:0;z-index:10;width:${timelineW}px;height:${HEAD_H}px;background:#f1edec;border-bottom:1px solid #c7c6ca;`;
 
-  let cur = new Date(minD);
+  // Month labels
+  let cur = new Date(minD.getFullYear(), minD.getMonth(), 1);
   while (cur <= maxD) {
-    const monthStart = new Date(cur.getFullYear(), cur.getMonth(), 1);
-    const monthEnd   = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
-    const startOff = Math.max(0, dayOffset(monthStart)) * DAY_W;
-    const endOff   = Math.min(totalDays, dayOffset(monthEnd)+1) * DAY_W;
-    const label = document.createElement('div');
-    label.className = 'gantt-month-label';
-    label.style.cssText = `left:${startOff}px;width:${endOff-startOff}px;`;
-    label.textContent = `${cur.getFullYear()}년 ${cur.getMonth()+1}월`;
-    monthHeader.appendChild(label);
+    const mEnd = new Date(cur.getFullYear(), cur.getMonth()+1, 0);
+    const x1 = Math.max(0, dayOff(cur)) * DAY_W;
+    const x2 = Math.min(totalDays, dayOff(mEnd)+1) * DAY_W;
+    const ml = document.createElement('div');
+    ml.style.cssText = `position:absolute;left:${x1}px;width:${x2-x1}px;top:0;height:28px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#46474a;border-right:1px solid #e5e2e1;letter-spacing:.04em;`;
+    ml.textContent = `${cur.getMonth()+1}월 ${cur.getFullYear()}`;
+    hdr.appendChild(ml);
     cur = new Date(cur.getFullYear(), cur.getMonth()+1, 1);
   }
-  timeline.appendChild(monthHeader);
 
-  // Day grid lines (only for month boundaries)
+  // Week tick marks
   for (let d = 0; d < totalDays; d++) {
     const dd = new Date(minD); dd.setDate(dd.getDate()+d);
-    if (dd.getDate() === 1) {
-      const line = document.createElement('div');
-      line.className = 'gantt-day-line';
-      line.style.left = (d * DAY_W) + 'px';
-      timeline.appendChild(line);
+    if (dd.getDay() === 1) { // Monday
+      const tk = document.createElement('div');
+      tk.style.cssText = `position:absolute;left:${d*DAY_W}px;top:28px;height:28px;border-left:1px solid #e5e2e1;display:flex;align-items:center;padding-left:3px;font-size:9px;color:#868380;`;
+      tk.textContent = `${dd.getMonth()+1}/${dd.getDate()}`;
+      hdr.appendChild(tk);
+    }
+  }
+  tl.appendChild(hdr);
+
+  // Background month stripes + vertical grid
+  for (let d = 0; d < totalDays; d++) {
+    const dd = new Date(minD); dd.setDate(dd.getDate()+d);
+    if (dd.getMonth() % 2 === 0 && dd.getDate() === 1) {
+      const stripe = document.createElement('div');
+      const mDays = new Date(dd.getFullYear(), dd.getMonth()+1, 0).getDate();
+      stripe.style.cssText = `position:absolute;left:${d*DAY_W}px;top:${HEAD_H}px;width:${mDays*DAY_W}px;bottom:0;background:rgba(0,0,0,.015);pointer-events:none;`;
+      tl.appendChild(stripe);
+    }
+    if (dd.getDay() === 1) {
+      const wl = document.createElement('div');
+      wl.style.cssText = `position:absolute;left:${d*DAY_W}px;top:${HEAD_H}px;width:1px;bottom:0;background:#f0edec;pointer-events:none;`;
+      tl.appendChild(wl);
     }
   }
 
   // Today line
-  if (todayOffset >= 0 && todayOffset < totalDays) {
-    const tl = document.createElement('div');
-    tl.className = 'gantt-today-line';
-    tl.style.left = (todayOffset * DAY_W + DAY_W/2) + 'px';
-    timeline.appendChild(tl);
+  if (todayOff >= 0 && todayOff < totalDays) {
+    const tdy = document.createElement('div');
+    tdy.style.cssText = `position:absolute;left:${todayOff*DAY_W+DAY_W/2}px;top:0;bottom:0;width:2px;background:#ef4444;opacity:.5;z-index:4;pointer-events:none;`;
+    tl.appendChild(tdy);
+    const tdyLbl = document.createElement('div');
+    tdyLbl.style.cssText = `position:absolute;left:${todayOff*DAY_W+DAY_W/2-12}px;top:30px;font-size:8px;font-weight:700;color:#ef4444;z-index:5;`;
+    tdyLbl.textContent = '오늘';
+    tl.appendChild(tdyLbl);
   }
 
-  // Bars
-  let rowTop = HEADER_H;
+  // Task bars
+  let rowTop = HEAD_H;
   rows.forEach(r => {
     if (r.type === 'proj') { rowTop += PROJ_H; return; }
     const t = r.task;
-    const barRow = document.createElement('div');
-    barRow.className = 'gantt-bar-row';
-    barRow.style.cssText = `top:${rowTop}px;left:0;right:0;height:${ROW_H}px;`;
+    const endD = new Date(t.nbd+'T00:00:00');
+    const startD = new Date(endD); startD.setDate(startD.getDate()-14);
+    const isOverdue = endD < today && t.status !== 'Completed';
+    const color = isOverdue ? '#ef4444' : (STATUS_COLORS[t.status]||'#868380');
 
-    if (t.nbd && t.nbd !== 'TBD' && t.createdAt) {
-      const startD = new Date(t.createdAt); startD.setHours(0,0,0,0);
-      const endD   = new Date(t.nbd+'T00:00:00');
-      if (!isNaN(endD)) {
-        let sx = dayOffset(startD) * DAY_W;
-        let ex = (dayOffset(endD) + 1) * DAY_W;
-        if (ex < 0 || sx > timelineW) { rowTop += ROW_H; return; }
-        sx = Math.max(0, sx); ex = Math.min(timelineW, ex);
-        const bar = document.createElement('div');
-        bar.className = 'gantt-bar';
-        bar.style.cssText = `position:absolute;left:${sx}px;width:${Math.max(4,ex-sx)}px;background:${STATUS_COLORS[t.status]||'#868380'};`;
-        bar.title = `${t.actionItem}\n${t.nbd}까지`;
-        bar.addEventListener('click', () => openDetail(t.id));
-        barRow.appendChild(bar);
-      }
-    } else if (t.createdAt) {
-      const startD = new Date(t.createdAt); startD.setHours(0,0,0,0);
-      let sx = dayOffset(startD) * DAY_W;
-      if (sx < timelineW) {
-        sx = Math.max(0, sx);
-        const dash = document.createElement('div');
-        dash.className = 'gantt-tbd-dash';
-        dash.style.cssText = `position:absolute;left:${sx}px;width:60px;top:50%;transform:translateY(-50%);`;
-        dash.title = `${t.actionItem} (TBD)`;
-        barRow.appendChild(dash);
-      }
+    let sx = dayOff(startD) * DAY_W;
+    let ex = (dayOff(endD)+1) * DAY_W;
+    sx = Math.max(0, sx); ex = Math.min(timelineW, ex);
+    const bw = Math.max(DAY_W, ex - sx);
+
+    const barWrap = document.createElement('div');
+    barWrap.style.cssText = `position:absolute;top:${rowTop}px;left:0;right:0;height:${ROW_H}px;display:flex;align-items:center;`;
+
+    const bar = document.createElement('div');
+    bar.style.cssText = `position:absolute;left:${sx}px;width:${bw}px;height:22px;border-radius:3px;background:${color};opacity:${t.status==='Completed'?.5:.8};cursor:pointer;display:flex;align-items:center;padding:0 6px;overflow:hidden;`;
+    bar.title = `${t.actionItem}\n→ ${t.nbd}${isOverdue?' ⚠ 기한 초과':''}`;
+    bar.innerHTML = `<span style="font-size:10px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.actionItem)}</span>`;
+    bar.addEventListener('click', () => openDetail(t.id));
+    barWrap.appendChild(bar);
+
+    // Deadline diamond marker
+    const nbdX = dayOff(endD) * DAY_W + DAY_W/2;
+    if (nbdX >= 0 && nbdX <= timelineW) {
+      const dia = document.createElement('div');
+      dia.style.cssText = `position:absolute;left:${nbdX-5}px;top:50%;transform:translateY(-50%) rotate(45deg);width:8px;height:8px;background:${color};border:1.5px solid #fff;border-radius:1px;z-index:3;`;
+      barWrap.appendChild(dia);
     }
-    timeline.appendChild(barRow);
+
+    tl.appendChild(barWrap);
     rowTop += ROW_H;
   });
 
-  timeline.style.height = rowTop + 'px';
-  right.appendChild(timeline);
+  // TBD rows
+  if (tbdRows.length) {
+    rowTop += PROJ_H; // header height
+    tbdRows.forEach(r => {
+      const t = r.task;
+      const color = STATUS_COLORS[t.status]||'#868380';
+      const barWrap = document.createElement('div');
+      barWrap.style.cssText = `position:absolute;top:${rowTop}px;left:0;right:0;height:${ROW_H}px;display:flex;align-items:center;`;
+      // Dashed open-ended bar starting from today
+      const sx = Math.max(0, todayOff) * DAY_W;
+      const dash = document.createElement('div');
+      dash.style.cssText = `position:absolute;left:${sx}px;height:6px;top:50%;transform:translateY(-50%);right:20px;border-radius:3px;background:repeating-linear-gradient(90deg,${color} 0,${color} 6px,transparent 6px,transparent 12px);opacity:.5;`;
+      const lbl = document.createElement('div');
+      lbl.style.cssText = `position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:700;color:${color};`;
+      lbl.textContent = 'TBD';
+      barWrap.appendChild(dash);
+      barWrap.appendChild(lbl);
+      tl.appendChild(barWrap);
+      rowTop += ROW_H;
+    });
+  }
+
+  tl.style.height = (rowTop + 20) + 'px';
+  right.appendChild(tl);
   wrap.appendChild(right);
 
   // Sync scroll
   right.addEventListener('scroll', () => { leftBody.scrollTop = right.scrollTop; });
   leftBody.addEventListener('scroll', () => { right.scrollTop = leftBody.scrollTop; });
 
-  // Scroll to today
+  // Scroll so today is 20% from left
   setTimeout(() => {
-    const scrollTo = Math.max(0, todayOffset * DAY_W - right.clientWidth / 2);
+    const scrollTo = Math.max(0, todayOff * DAY_W - right.clientWidth * 0.2);
     right.scrollLeft = scrollTo;
   }, 0);
 }
