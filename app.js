@@ -72,6 +72,7 @@ let pendingRemoteRender = false;
 let currentView  = 'list';
 let calViewYear  = new Date().getFullYear();
 let calViewMonth = new Date().getMonth();
+let pendingFocusId = null;
 
 // ── Helpers ──────────────────────────────────────────────────────
 function esc(s) {
@@ -344,6 +345,13 @@ function selectNav(pid, sid) {
     else                   bc.textContent = projName(pid);
   }
   renderSidebar(); renderView();
+  if (pid && pid !== '__doe__' && currentView === 'list') {
+    const targetId = sid ? `grp-sect-${pid}-${sid}` : `proj-sect-${pid}`;
+    setTimeout(() => {
+      const el = document.getElementById(targetId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  }
 }
 
 function addProject() {
@@ -398,9 +406,7 @@ function renderTable() {
     return;
   }
 
-  const sortedProjs = Object.entries(projects)
-    .sort(([,a],[,b])=>(a.order||0)-(b.order||0))
-    .filter(([pid])=>!currentProjectId || pid===currentProjectId);
+  const sortedProjs = Object.entries(projects).sort(([,a],[,b])=>(a.order||0)-(b.order||0));
 
   sortedProjs.forEach(([pid, proj]) => {
     const allProjTasks = Object.entries(tasks)
@@ -410,16 +416,11 @@ function renderTable() {
     const subs = Object.entries(subprojects).filter(([,s])=>s.projectId===pid).sort(([,a],[,b])=>(a.order||0)-(b.order||0));
     const collKey = `p:${pid}`;
     const isColl  = collapsed.has(collKey);
-
-    let visCount = 0;
-    if (!currentSubProjectId) visCount += allProjTasks.filter(t=>!t.subProjectId&&matchesFilter(t)).length;
-    subs.forEach(([sid]) => {
-      if (currentSubProjectId && currentSubProjectId!==sid) return;
-      visCount += allProjTasks.filter(t=>t.subProjectId===sid&&matchesFilter(t)).length;
-    });
+    const visCount = allProjTasks.filter(t=>matchesFilter(t)).length;
 
     const pRow = document.createElement('tr');
     pRow.className = 'project-row';
+    pRow.id = `proj-sect-${pid}`;
     pRow.innerHTML = `<td colspan="8"><div class="row-inner">
       <button class="toggle-btn" onclick="toggleCollapse('${collKey}')">
         <span class="material-symbols-outlined" style="font-size:16px">${isColl?'chevron_right':'expand_more'}</span>
@@ -427,47 +428,75 @@ function renderTable() {
       <span class="material-symbols-outlined" style="font-size:16px;color:#46474a">folder_open</span>
       <span class="row-label">${esc(proj.name)}</span>
       <span class="row-count">${visCount}</span>
-      <span style="flex:1"></span>
-      <button class="add-row-btn" onclick="openAddModal('${pid}','')">
-        <span class="material-symbols-outlined" style="font-size:14px">add</span> 항목 추가
-      </button>
     </div></td>`;
     tbody.appendChild(pRow);
     if (isColl) return;
 
-    if (!currentSubProjectId) {
-      allProjTasks.filter(t=>!t.subProjectId&&matchesFilter(t)).forEach(t=>tbody.appendChild(createTaskRow(t,false)));
-    }
+    // Ungrouped tasks
+    allProjTasks.filter(t=>!t.subProjectId&&matchesFilter(t)).forEach(t=>tbody.appendChild(createTaskRow(t,false)));
 
+    // Sub groups
     subs.forEach(([sid, sub]) => {
-      if (currentSubProjectId && currentSubProjectId!==sid) return;
       const gTasks = allProjTasks.filter(t=>t.subProjectId===sid&&matchesFilter(t));
       const gKey = `g:${pid}:${sid}`;
       const gColl = collapsed.has(gKey);
 
       const gRow = document.createElement('tr');
       gRow.className = 'group-row';
+      gRow.id = `grp-sect-${pid}-${sid}`;
       gRow.innerHTML = `<td colspan="8"><div class="row-inner">
         <button class="toggle-btn" onclick="toggleCollapse('${gKey}')">
           <span class="material-symbols-outlined" style="font-size:15px">${gColl?'chevron_right':'expand_more'}</span>
         </button>
         <span class="row-label">${esc(sub.name)}</span>
         <span class="row-count">${gTasks.length}</span>
-        <span style="flex:1"></span>
-        <button class="add-row-btn" onclick="openAddModal('${pid}','${sid}')">
-          <span class="material-symbols-outlined" style="font-size:14px">add</span> 항목 추가
-        </button>
       </div></td>`;
       tbody.appendChild(gRow);
-      if (!gColl) gTasks.forEach(t=>tbody.appendChild(createTaskRow(t,true)));
+      if (!gColl) {
+        gTasks.forEach(t=>tbody.appendChild(createTaskRow(t,true)));
+        tbody.appendChild(createInlineAddRow(pid, sid));
+      }
     });
 
-    const addRow = document.createElement('tr');
-    addRow.className = 'add-row';
-    addRow.innerHTML = `<td colspan="8"><button class="add-row-btn" onclick="openAddModal('${pid}','')">
-      <span class="material-symbols-outlined" style="font-size:14px">add</span> 그룹 없이 추가
-    </button></td>`;
-    tbody.appendChild(addRow);
+    tbody.appendChild(createInlineAddRow(pid, ''));
+  });
+
+  // Auto-focus new task if pending
+  if (pendingFocusId) {
+    const id = pendingFocusId; pendingFocusId = null;
+    setTimeout(() => {
+      const cell = document.querySelector(`tr[data-task-id="${id}"] td[data-field="actionItem"]`);
+      if (cell) cell.click();
+    }, 0);
+  }
+}
+
+function createInlineAddRow(pid, sid) {
+  const tr = document.createElement('tr');
+  tr.className = `add-row inline-add-row`;
+  const indent = sid ? '44px' : '24px';
+  tr.innerHTML = `<td colspan="8" style="padding:4px 10px 4px ${indent}">
+    <button class="inline-add-btn">
+      <span class="material-symbols-outlined" style="font-size:13px">add</span>
+      <span>항목 추가...</span>
+    </button>
+  </td>`;
+  tr.querySelector('.inline-add-btn').addEventListener('click', () => quickAddTask(pid, sid));
+  return tr;
+}
+
+function quickAddTask(pid, sid) {
+  if (!pid) return;
+  const siblings = Object.values(tasks).filter(t=>t.projectId===pid&&t.subProjectId===(sid||''));
+  const maxOrd = siblings.reduce((m,t)=>Math.max(m,t.order||0),-1);
+  const id = newId('task');
+  pendingFocusId = id;
+  db.ref(`${DB_PATH}/tasks/${id}`).set({
+    projectId: pid, subProjectId: sid||'',
+    actionItem:'', refDetails:'', assignees:'',
+    nbd:'TBD', status:'Not Started',
+    latestUpdate:'', updateLog:'',
+    order: maxOrd+1, createdAt: Date.now(), updatedAt: Date.now(),
   });
 }
 
@@ -1085,10 +1114,6 @@ function setupEvents() {
   });
   document.getElementById('btn-export-excel').addEventListener('click',exportExcel);
   document.getElementById('btn-export-pdf').addEventListener('click',exportPDF);
-  document.getElementById('btn-add-task').addEventListener('click',()=>{
-    const pid=currentProjectId&&currentProjectId!=='__doe__'?currentProjectId:(Object.keys(projects)[0]||'');
-    openAddModal(pid, currentSubProjectId||'');
-  });
   document.getElementById('btn-confirm-add').addEventListener('click',confirmAdd);
   document.getElementById('btn-cancel-add').addEventListener('click',closeAddModal);
   document.getElementById('add-action').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey))confirmAdd();});

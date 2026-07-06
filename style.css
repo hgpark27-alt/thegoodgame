@@ -135,9 +135,9 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: #fdf8f8; col
 .action-btn:hover { background: #ebe7e7; color: #000; }
 
 /* ── Add row ── */
-.add-row td { padding: 6px 10px; background: #fdf8f8; border-bottom: 1px solid #ebe7e7; }
-.add-row-btn { border: none; background: transparent; cursor: pointer; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #76777b; display: flex; align-items: center; gap: 5px; padding: 3px 6px; border-radius: 2px; transition: all 0.12s; font-family: inherit; }
-.add-row-btn:hover { background: #ebe7e7; color: #000; }
+.add-row td { padding: 2px 10px; background: #fdf8f8; border-bottom: 1px solid #ebe7e7; }
+.inline-add-btn { border: none; background: transparent; cursor: pointer; font-size: 11px; color: #c7c6ca; display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 2px; transition: all 0.12s; font-family: inherit; width: 100%; }
+.inline-add-btn:hover { color: #46474a; background: #f1edec; }
 
 /* ── Modal ── */
 #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; z-index: 200; }

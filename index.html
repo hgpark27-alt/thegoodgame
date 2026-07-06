@@ -24,11 +24,6 @@
 <aside id="sidebar">
   <div class="logo">DV NOTE</div>
 
-  <button class="new-btn" onclick="openAddModal(currentProjectId&&currentProjectId!=='__doe__'?currentProjectId:(Object.keys(projects)[0]||''),'')">
-    <span class="material-symbols-outlined" style="font-size:16px">add</span>
-    새 항목 추가
-  </button>
-
   <nav style="flex:1;overflow-y:auto;padding:0 0 8px">
     <div class="nav-section">프로젝트</div>
     <div class="nav-item active" id="nav-all">
@@ -83,10 +78,6 @@
       <span style="font-size:13px;font-weight:400;color:#76777b">SPS · BLACKONYX · PVD</span>
     </div>
     <div class="ws-actions">
-      <button class="ws-btn primary" id="btn-add-task">
-        <span class="material-symbols-outlined" style="font-size:14px">add</span>
-        새 항목
-      </button>
       <select class="filter-select" id="filter-status">
         <option value="">모든 상태</option>
         <option value="Not Started">미시작</option>
