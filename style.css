@@ -255,9 +255,10 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: #fdf8f8; col
 .gantt-header-row { height: 40px; background: #f1edec; border-bottom: 1px solid #c7c6ca; display: flex; align-items: flex-end; padding: 0 10px 4px; flex-shrink: 0; }
 .gantt-header-label { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #868380; }
 .gantt-left-body { overflow-y: auto; flex: 1; }
-.gantt-task-row { height: 36px; display: flex; align-items: center; padding: 0 10px; gap: 8px; border-bottom: 1px solid #f1edec; }
+.gantt-task-row { height: 38px; display: flex; align-items: center; padding: 0 10px; gap: 8px; border-bottom: 1px solid #f1edec; }
 .gantt-task-row:hover { background: #fdf8f8; }
-.gantt-task-name { font-size: 11px; color: #1c1b1b; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gantt-task-name { font-size: 11px; color: #1c1b1b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gantt-overdue { color: #ef4444; font-weight: 600; }
 .gantt-proj-row { height: 28px; display: flex; align-items: center; padding: 0 10px; background: #ebe7e7; border-bottom: 1px solid #c7c6ca; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #46474a; }
 .gantt-timeline { position: relative; }
 .gantt-month-header { position: sticky; top: 0; height: 40px; background: #f1edec; border-bottom: 1px solid #c7c6ca; display: flex; z-index: 10; }
