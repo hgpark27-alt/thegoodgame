@@ -62,25 +62,49 @@ let activeEditCell = null;  // { taskId, field, el }
 let pendingRemoteRender = false;
 
 // ── Init ─────────────────────────────────────────────────────────
+let _seeded = false;
+let _connectTimer;
+
+function showLoadError(msg) {
+  const tbody = document.getElementById('task-tbody');
+  if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:48px;color:#ef4444;font-size:13px;line-height:2">
+    ⚠ ${msg}<br>
+    <small style="color:#76777b;font-size:11px">Firebase Console → Realtime Database → Rules →
+    <code style="background:#f1edec;padding:1px 5px;border-radius:2px">.read: true, .write: true</code> 로 변경 후 게시</small>
+  </td></tr>`;
+}
+
 function init() {
   firebase.initializeApp(firebaseConfig);
   db = firebase.database();
 
+  // 6초 안에 응답 없으면 타임아웃 에러 표시
+  _connectTimer = setTimeout(() => {
+    showLoadError('Firebase 연결 시간 초과 — Database Rules를 확인하세요.');
+  }, 6000);
+
   db.ref(`${DB_PATH}/tasks`).on('value', snap => {
+    clearTimeout(_connectTimer);
     tasks = snap.val() || {};
-    // 편집 중인 셀이 있으면 테이블 재렌더 보류 (입력값 날아가는 것 방지)
+
+    // 최초 1회만: 데이터 없으면 시드 삽입
+    if (!_seeded) {
+      _seeded = true;
+      if (!snap.val()) { seedData(); return; }
+    }
+
     if (activeEditCell) {
       pendingRemoteRender = true;
     } else {
       renderTable();
     }
     updateSummary();
-    // 열려있는 디테일 패널도 갱신 (편집 중인 필드 제외)
     if (selectedTaskId) renderDetailRemote();
-  });
 
-  db.ref(`${DB_PATH}/tasks`).once('value', snap => {
-    if (!snap.val()) seedData();
+  }, err => {
+    // Firebase 규칙 거부 또는 네트워크 에러
+    clearTimeout(_connectTimer);
+    showLoadError(`Firebase 접근 거부 (${err.code}) — Database Rules를 확인하세요.`);
   });
 
   setupEvents();
