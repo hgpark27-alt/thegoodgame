@@ -1,9 +1,8 @@
 // ================================================================
 //  ⚽ 스코어 예측 — 승부예측 상금풀 앱
 // ================================================================
-const DB_PATH    = 'soccerPool';
-const ENTRY_FEE  = 5000;
-const ADMIN_CODE = '0282';
+const DB_PATH   = 'soccerPool';
+const ENTRY_FEE = 5000;
 
 let db;
 let match = { teamA: 'A팀', teamB: 'B팀', status: 'open', finalScoreA: null, finalScoreB: null };
@@ -12,7 +11,6 @@ let entries = {};   // { id: { name, scoreA, scoreB, createdAt } }
 let pickA = 0, pickB = 0;       // 참가 폼 선택값
 let settleA = 0, settleB = 0;   // 결과입력 폼 선택값
 let editingTeam = null;         // 'A' | 'B' | null — 팀명 편집 중 원격 갱신 방지
-let isAdmin = false;            // 관리자 인증 여부
 
 // ── Init ─────────────────────────────────────────────────────────
 function init() {
@@ -35,9 +33,6 @@ function init() {
 
   document.getElementById('name-input')
     .addEventListener('keydown', e => { if (e.key === 'Enter') joinPool(); });
-
-  document.getElementById('admin-pw-input')
-    .addEventListener('keydown', e => { if (e.key === 'Enter') verifyAdminPw(); });
 
   updatePickerDisplay();
   updateSettleDisplay();
@@ -226,31 +221,6 @@ function settleMatch() {
     status: 'settled', finalScoreA: settleA, finalScoreB: settleB
   });
   document.getElementById('settle-panel').classList.add('hidden');
-}
-
-// ── 관리자 인증 ─────────────────────────────────────────────────
-function openAdminModal() {
-  document.getElementById('admin-modal').classList.remove('hidden');
-  const inp = document.getElementById('admin-pw-input');
-  inp.value = '';
-  setTimeout(() => inp.focus(), 0);
-}
-function closeAdminModal() {
-  document.getElementById('admin-modal').classList.add('hidden');
-}
-function verifyAdminPw() {
-  const inp = document.getElementById('admin-pw-input');
-  if (inp.value.trim() !== ADMIN_CODE) {
-    alert('비밀번호가 틀렸습니다.');
-    inp.value = '';
-    inp.focus();
-    return;
-  }
-  isAdmin = true;
-  document.getElementById('team-a-name').contentEditable = 'true';
-  document.getElementById('team-b-name').contentEditable = 'true';
-  document.getElementById('admin-area').classList.remove('hidden');
-  closeAdminModal();
 }
 
 // ── Utils ────────────────────────────────────────────────────────

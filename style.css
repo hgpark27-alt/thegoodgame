@@ -23,60 +23,6 @@ body {
   padding-bottom: 48px;
 }
 
-/* ── Admin icon ── */
-.admin-icon-btn {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 36px;
-  height: 36px;
-  border: 1.5px solid var(--border);
-  border-radius: 50%;
-  background: var(--card);
-  font-size: 15px;
-  cursor: pointer;
-  z-index: 10;
-}
-.admin-icon-btn:active { background: #EAF7EC; }
-
-/* ── Admin password modal ── */
-.admin-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-}
-.admin-modal.hidden { display: none; }
-.admin-modal-card {
-  background: var(--card);
-  border-radius: 20px;
-  padding: 26px 22px;
-  width: 84%;
-  max-width: 300px;
-}
-.admin-modal-title {
-  font-size: 15px;
-  font-weight: 800;
-  text-align: center;
-  margin-bottom: 14px;
-}
-#admin-pw-input {
-  display: block;
-  width: 100%;
-  padding: 13px 16px;
-  border: 1.5px solid var(--border);
-  border-radius: 14px;
-  font-size: 16px;
-  text-align: center;
-  letter-spacing: 4px;
-  font-family: inherit;
-  outline: none;
-  color: var(--text);
-}
-#admin-pw-input:focus { border-color: var(--accent); }
 
 /* ── Header ── */
 header {
