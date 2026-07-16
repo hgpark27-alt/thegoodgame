@@ -56,6 +56,7 @@ function setupTeamNameEditing() {
 function renderAll() {
   renderStatusBanner();
   renderScoreboardNames();
+  renderPickerLabels();
   renderPoolInfo();
   updateOddsHint();
   renderOddsList();
@@ -67,7 +68,7 @@ function renderStatusBanner() {
   const el = document.getElementById('status-banner');
   if (match.status === 'settled') {
     el.className = 'status-banner settled';
-    el.textContent = `🏁 경기 종료 — 최종 스코어 ${match.finalScoreA} : ${match.finalScoreB}`;
+    el.textContent = `🏁 경기 종료 — 최종 스코어 ${match.teamA} ${match.finalScoreA} : ${match.finalScoreB} ${match.teamB}`;
   } else {
     el.className = 'status-banner';
     el.textContent = '⚽ 예측 접수중';
@@ -77,6 +78,13 @@ function renderStatusBanner() {
 function renderScoreboardNames() {
   if (editingTeam !== 'A') document.getElementById('team-a-name').textContent = match.teamA;
   if (editingTeam !== 'B') document.getElementById('team-b-name').textContent = match.teamB;
+}
+
+function renderPickerLabels() {
+  document.getElementById('pick-a-label').textContent = match.teamA;
+  document.getElementById('pick-b-label').textContent = match.teamB;
+  document.getElementById('settle-a-label').textContent = match.teamA;
+  document.getElementById('settle-b-label').textContent = match.teamB;
 }
 
 function renderPoolInfo() {
@@ -148,12 +156,15 @@ function renderOddsList() {
   const rows = Object.entries(groups).sort((a, b) => b[1] - a[1]);
 
   el.innerHTML = rows.map(([score, count]) => {
+    const [sa, sb] = score.split(':');
     const payout = Math.floor(pool / count);
     return `
       <div class="odds-item">
-        <div class="odds-score">${esc(score)}</div>
-        <div class="odds-count">${count}명 선택</div>
-        <div class="odds-payout">1인당 ₩${payout.toLocaleString()}</div>
+        <div class="odds-score">${esc(match.teamA)} ${sa} : ${sb} ${esc(match.teamB)}</div>
+        <div class="odds-meta">
+          <div class="odds-count">${count}명 선택</div>
+          <div class="odds-payout">1인당 ₩${payout.toLocaleString()}</div>
+        </div>
       </div>`;
   }).join('');
 }
@@ -188,9 +199,11 @@ function renderEntryList() {
     }
     return `
       <div class="${cls}">
-        <div class="entry-score">${e.scoreA}:${e.scoreB}</div>
-        <div class="entry-name">${esc(e.name)}</div>
-        ${payoutHtml}
+        <div class="entry-score">${esc(match.teamA)} ${e.scoreA} : ${e.scoreB} ${esc(match.teamB)}</div>
+        <div class="entry-main">
+          <div class="entry-name">${esc(e.name)}</div>
+          ${payoutHtml}
+        </div>
       </div>`;
   }).join('');
 

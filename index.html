@@ -39,6 +39,11 @@
   <div id="join-form" class="join-form">
     <div class="form-title">내 예측 스코어</div>
 
+    <div class="picker-labels">
+      <div id="pick-a-label" class="picker-team-label">A팀</div>
+      <div class="picker-mid-spacer"></div>
+      <div id="pick-b-label" class="picker-team-label">B팀</div>
+    </div>
     <div class="score-picker">
       <div class="picker-col">
         <button class="step-btn" onclick="step('A',1)">▲</button>
@@ -77,6 +82,11 @@
 
     <div id="settle-panel" class="settle-panel hidden">
       <div class="form-title">최종 스코어</div>
+      <div class="picker-labels">
+        <div id="settle-a-label" class="picker-team-label">A팀</div>
+        <div class="picker-mid-spacer"></div>
+        <div id="settle-b-label" class="picker-team-label">B팀</div>
+      </div>
       <div class="score-picker">
         <div class="picker-col">
           <button class="step-btn" onclick="stepSettle('A',1)">▲</button>

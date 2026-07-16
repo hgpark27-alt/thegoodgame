@@ -131,6 +131,25 @@ header {
 }
 
 /* ── Score picker (graphical stepper) ── */
+.picker-labels {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 6px;
+}
+.picker-team-label {
+  width: 64px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accent-dark);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.picker-mid-spacer { width: 18px; }
+
 .score-picker {
   display: flex;
   align-items: center;
@@ -228,8 +247,8 @@ header {
 .odds-list { display: flex; flex-direction: column; gap: 6px; }
 .odds-item {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 3px;
   padding: 10px 14px;
   background: var(--card);
   border: 1.5px solid var(--border);
@@ -238,9 +257,9 @@ header {
 }
 .odds-score {
   font-weight: 900;
-  min-width: 42px;
   color: var(--accent-dark);
 }
+.odds-meta { display: flex; align-items: center; gap: 8px; }
 .odds-count { color: var(--muted); flex: 1; }
 .odds-payout { font-weight: 800; }
 .empty-msg {
@@ -255,8 +274,8 @@ header {
 .entry-list { display: flex; flex-direction: column; gap: 6px; }
 .entry-item {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 3px;
   padding: 11px 14px;
   background: var(--card);
   border: 1.5px solid var(--border);
@@ -268,11 +287,11 @@ header {
 }
 .entry-item.loser { opacity: .5; }
 .entry-score {
-  font-weight: 900;
-  font-size: 15px;
-  min-width: 40px;
-  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
 }
+.entry-main { display: flex; align-items: center; gap: 8px; }
 .entry-name { flex: 1; font-size: 14.5px; font-weight: 600; }
 .entry-payout {
   font-size: 12.5px;
