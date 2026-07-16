@@ -3,41 +3,101 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>신준식 총각파티 어디갈까?</title>
+  <title>⚽ 스코어 예측</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <header>
-    <div class="title">신준식 총각파티 🎡</div>
-    <div class="subtitle">어디갈까? 돌려서 정하자</div>
+    <div class="title">⚽ 스코어 예측</div>
+    <div class="subtitle">1인당 5,000P · 정확히 맞춘 사람들이 나눠가져요</div>
   </header>
 
-  <div class="wheel-wrap">
-    <div class="pointer">▼</div>
-    <canvas id="wheel"></canvas>
-    <div id="spin-hint" class="spin-hint hidden">장소를 2개 이상 추가하세요</div>
+  <!-- 경기 상태 배너 -->
+  <div id="status-banner" class="status-banner"></div>
+
+  <!-- 스코어보드 (팀명 편집 가능) -->
+  <div class="scoreboard">
+    <span id="team-a-name" class="team-name" contenteditable="true" spellcheck="false">A팀</span>
+    <span class="vs">VS</span>
+    <span id="team-b-name" class="team-name" contenteditable="true" spellcheck="false">B팀</span>
   </div>
 
-  <button id="spin-btn" onclick="spin()" disabled>돌려! 🎲</button>
-
-  <!-- Result overlay -->
-  <div id="result-overlay" class="hidden" onclick="closeResult()">
-    <div class="result-card" onclick="event.stopPropagation()">
-      <div class="result-emoji">🎉</div>
-      <div class="result-label">오늘은 여기!</div>
-      <div id="result-place"></div>
-      <button onclick="closeResult()">다시 돌리기</button>
+  <!-- 참가 풀 정보 -->
+  <div class="pool-info">
+    <div class="pool-box">
+      <div class="pool-label">참가자</div>
+      <div id="pool-count" class="pool-value">0명</div>
+    </div>
+    <div class="pool-box">
+      <div class="pool-label">총 상금</div>
+      <div id="pool-total" class="pool-value">0P</div>
     </div>
   </div>
 
-  <!-- Add place -->
-  <div class="add-row">
-    <input id="place-input" type="text" placeholder="가고 싶은 곳 입력..." maxlength="15" autocomplete="off">
-    <button id="add-btn" onclick="addPlace()">추가</button>
+  <!-- 참가 폼 -->
+  <div id="join-form" class="join-form">
+    <div class="form-title">내 예측 스코어</div>
+
+    <div class="score-picker">
+      <div class="picker-col">
+        <button class="step-btn" onclick="step('A',1)">▲</button>
+        <div id="pick-a-val" class="score-digit">0</div>
+        <button class="step-btn" onclick="step('A',-1)">▼</button>
+      </div>
+      <div class="picker-mid">:</div>
+      <div class="picker-col">
+        <button class="step-btn" onclick="step('B',1)">▲</button>
+        <div id="pick-b-val" class="score-digit">0</div>
+        <button class="step-btn" onclick="step('B',-1)">▼</button>
+      </div>
+    </div>
+
+    <div id="odds-hint" class="odds-hint"></div>
+
+    <input id="name-input" type="text" placeholder="이름을 입력하세요" maxlength="10" autocomplete="off">
+    <button id="join-btn" onclick="joinPool()">참가하기 (5,000P)</button>
   </div>
 
-  <div id="place-list"></div>
+  <!-- 예상 배당 -->
+  <div class="section">
+    <div class="section-title">📊 스코어별 예상 배당</div>
+    <div id="odds-list" class="odds-list"></div>
+  </div>
+
+  <!-- 참가자 목록 -->
+  <div class="section">
+    <div class="section-title">👥 참가자 목록</div>
+    <div id="entry-list" class="entry-list"></div>
+  </div>
+
+  <!-- 관리 영역 -->
+  <div class="admin-area">
+    <button id="settle-toggle-btn" class="admin-link" onclick="toggleSettlePanel()">🏁 경기결과 입력</button>
+
+    <div id="settle-panel" class="settle-panel hidden">
+      <div class="form-title">최종 스코어</div>
+      <div class="score-picker">
+        <div class="picker-col">
+          <button class="step-btn" onclick="stepSettle('A',1)">▲</button>
+          <div id="settle-a-val" class="score-digit">0</div>
+          <button class="step-btn" onclick="stepSettle('A',-1)">▼</button>
+        </div>
+        <div class="picker-mid">:</div>
+        <div class="picker-col">
+          <button class="step-btn" onclick="stepSettle('B',1)">▲</button>
+          <div id="settle-b-val" class="score-digit">0</div>
+          <button class="step-btn" onclick="stepSettle('B',-1)">▼</button>
+        </div>
+      </div>
+      <div class="settle-actions">
+        <button class="btn-secondary" onclick="toggleSettlePanel()">취소</button>
+        <button class="btn-primary" onclick="settleMatch()">결과 확정</button>
+      </div>
+    </div>
+
+    <button class="admin-link muted" onclick="resetMatch()">↺ 새 경기 시작</button>
+  </div>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
