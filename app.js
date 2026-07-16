@@ -1,8 +1,9 @@
 // ================================================================
 //  ⚽ 스코어 예측 — 승부예측 상금풀 앱
 // ================================================================
-const DB_PATH   = 'soccerPool';
-const ENTRY_FEE = 5000;
+const DB_PATH    = 'soccerPool';
+const ENTRY_FEE  = 5000;
+const ADMIN_CODE = '0282';
 
 let db;
 let match = { teamA: 'A팀', teamB: 'B팀', status: 'open', finalScoreA: null, finalScoreB: null };
@@ -11,6 +12,7 @@ let entries = {};   // { id: { name, scoreA, scoreB, createdAt } }
 let pickA = 0, pickB = 0;       // 참가 폼 선택값
 let settleA = 0, settleB = 0;   // 결과입력 폼 선택값
 let editingTeam = null;         // 'A' | 'B' | null — 팀명 편집 중 원격 갱신 방지
+let isAdmin = false;            // 관리자 인증 여부
 
 // ── Init ─────────────────────────────────────────────────────────
 function init() {
@@ -33,6 +35,9 @@ function init() {
 
   document.getElementById('name-input')
     .addEventListener('keydown', e => { if (e.key === 'Enter') joinPool(); });
+
+  document.getElementById('admin-pw-input')
+    .addEventListener('keydown', e => { if (e.key === 'Enter') verifyAdminPw(); });
 
   updatePickerDisplay();
   updateSettleDisplay();
@@ -82,7 +87,7 @@ function renderScoreboardNames() {
 function renderPoolInfo() {
   const list = Object.values(entries);
   document.getElementById('pool-count').textContent = `${list.length}명`;
-  document.getElementById('pool-total').textContent = `${(list.length * ENTRY_FEE).toLocaleString()}P`;
+  document.getElementById('pool-total').textContent = `₩${(list.length * ENTRY_FEE).toLocaleString()}`;
 }
 
 // ── Score picker (join form) ────────────────────────────────────
@@ -104,14 +109,14 @@ function updateOddsHint() {
   const projectedPool = (list.length + 1) * ENTRY_FEE;
   const projectedWinners = sameCount + 1;
   const payout = Math.floor(projectedPool / projectedWinners);
-  hint.textContent = `이 스코어를 고른 사람 ${sameCount}명 → 지금 참가 시 예상 배당 약 ${payout.toLocaleString()}P`;
+  hint.textContent = `이 스코어를 고른 사람 ${sameCount}명 → 지금 참가 시 예상 배당 약 ₩${payout.toLocaleString()}`;
 }
 
 function updateJoinFormState() {
   const btn = document.getElementById('join-btn');
   const closed = match.status !== 'open';
   btn.disabled = closed;
-  btn.textContent = closed ? '이미 종료된 경기입니다' : `참가하기 (${ENTRY_FEE.toLocaleString()}P)`;
+  btn.textContent = closed ? '이미 종료된 경기입니다' : `참가하기 (₩${ENTRY_FEE.toLocaleString()})`;
 }
 
 // ── Join ─────────────────────────────────────────────────────────
@@ -126,13 +131,6 @@ function joinPool() {
     name, scoreA: pickA, scoreB: pickB, createdAt: Date.now()
   });
   inp.value = '';
-}
-
-function deleteEntry(id) {
-  const e = entries[id];
-  if (!e) return;
-  if (!confirm(`"${e.name}" 님의 예측(${e.scoreA}:${e.scoreB})을 삭제할까요?`)) return;
-  db.ref(`${DB_PATH}/entries/${id}`).remove();
 }
 
 // ── Odds list ────────────────────────────────────────────────────
@@ -160,7 +158,7 @@ function renderOddsList() {
       <div class="odds-item">
         <div class="odds-score">${esc(score)}</div>
         <div class="odds-count">${count}명 선택</div>
-        <div class="odds-payout">1인당 ${payout.toLocaleString()}P</div>
+        <div class="odds-payout">1인당 ₩${payout.toLocaleString()}</div>
       </div>`;
   }).join('');
 }
@@ -188,7 +186,7 @@ function renderEntryList() {
     if (settled) {
       if (winnerIds.includes(id)) {
         cls += ' winner';
-        payoutHtml = `<div class="entry-payout">🏆 ${payout.toLocaleString()}P</div>`;
+        payoutHtml = `<div class="entry-payout">🏆 ₩${payout.toLocaleString()}</div>`;
       } else {
         cls += ' loser';
       }
@@ -198,7 +196,6 @@ function renderEntryList() {
         <div class="entry-score">${e.scoreA}:${e.scoreB}</div>
         <div class="entry-name">${esc(e.name)}</div>
         ${payoutHtml}
-        <button class="entry-del" onclick="deleteEntry('${id}')">×</button>
       </div>`;
   }).join('');
 
@@ -231,13 +228,29 @@ function settleMatch() {
   document.getElementById('settle-panel').classList.add('hidden');
 }
 
-function resetMatch() {
-  if (!confirm('새 경기를 시작할까요? 현재 참가자 목록이 모두 삭제됩니다.')) return;
-  db.ref(`${DB_PATH}/entries`).remove();
-  db.ref(`${DB_PATH}/match`).update({ status: 'open', finalScoreA: null, finalScoreB: null });
-  settleA = 0; settleB = 0;
-  updateSettleDisplay();
-  document.getElementById('settle-panel').classList.add('hidden');
+// ── 관리자 인증 ─────────────────────────────────────────────────
+function openAdminModal() {
+  document.getElementById('admin-modal').classList.remove('hidden');
+  const inp = document.getElementById('admin-pw-input');
+  inp.value = '';
+  setTimeout(() => inp.focus(), 0);
+}
+function closeAdminModal() {
+  document.getElementById('admin-modal').classList.add('hidden');
+}
+function verifyAdminPw() {
+  const inp = document.getElementById('admin-pw-input');
+  if (inp.value.trim() !== ADMIN_CODE) {
+    alert('비밀번호가 틀렸습니다.');
+    inp.value = '';
+    inp.focus();
+    return;
+  }
+  isAdmin = true;
+  document.getElementById('team-a-name').contentEditable = 'true';
+  document.getElementById('team-b-name').contentEditable = 'true';
+  document.getElementById('admin-area').classList.remove('hidden');
+  closeAdminModal();
 }
 
 // ── Utils ────────────────────────────────────────────────────────
