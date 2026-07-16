@@ -8,19 +8,33 @@
 </head>
 <body>
 
+  <button id="admin-icon-btn" class="admin-icon-btn" onclick="openAdminModal()">🔒</button>
+
   <header>
     <div class="title">⚽ 스코어 예측</div>
-    <div class="subtitle">1인당 5,000P · 정확히 맞춘 사람들이 나눠가져요</div>
+    <div class="subtitle">1인당 ₩5,000 · 정확히 맞춘 사람들이 나눠가져요</div>
   </header>
+
+  <!-- 관리자 인증 모달 -->
+  <div id="admin-modal" class="admin-modal hidden" onclick="closeAdminModal()">
+    <div class="admin-modal-card" onclick="event.stopPropagation()">
+      <div class="admin-modal-title">🔒 관리자 인증</div>
+      <input id="admin-pw-input" type="tel" inputmode="numeric" maxlength="4" placeholder="비밀번호 4자리" autocomplete="off">
+      <div class="settle-actions">
+        <button class="btn-secondary" onclick="closeAdminModal()">취소</button>
+        <button class="btn-primary" onclick="verifyAdminPw()">확인</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 경기 상태 배너 -->
   <div id="status-banner" class="status-banner"></div>
 
   <!-- 스코어보드 (팀명 편집 가능) -->
   <div class="scoreboard">
-    <span id="team-a-name" class="team-name" contenteditable="true" spellcheck="false">A팀</span>
+    <span id="team-a-name" class="team-name" contenteditable="false" spellcheck="false">A팀</span>
     <span class="vs">VS</span>
-    <span id="team-b-name" class="team-name" contenteditable="true" spellcheck="false">B팀</span>
+    <span id="team-b-name" class="team-name" contenteditable="false" spellcheck="false">B팀</span>
   </div>
 
   <!-- 참가 풀 정보 -->
@@ -56,7 +70,7 @@
     <div id="odds-hint" class="odds-hint"></div>
 
     <input id="name-input" type="text" placeholder="이름을 입력하세요" maxlength="10" autocomplete="off">
-    <button id="join-btn" onclick="joinPool()">참가하기 (5,000P)</button>
+    <button id="join-btn" onclick="joinPool()">참가하기 (₩5,000)</button>
   </div>
 
   <!-- 예상 배당 -->
@@ -71,8 +85,8 @@
     <div id="entry-list" class="entry-list"></div>
   </div>
 
-  <!-- 관리 영역 -->
-  <div class="admin-area">
+  <!-- 관리 영역 (관리자 인증 후에만 노출) -->
+  <div id="admin-area" class="admin-area hidden">
     <button id="settle-toggle-btn" class="admin-link" onclick="toggleSettlePanel()">🏁 경기결과 입력</button>
 
     <div id="settle-panel" class="settle-panel hidden">
@@ -95,8 +109,6 @@
         <button class="btn-primary" onclick="settleMatch()">결과 확정</button>
       </div>
     </div>
-
-    <button class="admin-link muted" onclick="resetMatch()">↺ 새 경기 시작</button>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
