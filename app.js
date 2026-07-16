@@ -1,231 +1,248 @@
 // ================================================================
-//  어디 갈까? — 룰렛 (대한민국 시도)
+//  ⚽ 스코어 예측 — 승부예측 상금풀 앱
 // ================================================================
-const DB_PATH = 'roulette';
-
-const COLORS = [
-  '#FF6B6B','#FF9F43','#FECA57','#48DBFB','#FF9FF3',
-  '#54A0FF','#5F27CD','#01CBC6','#10AC84','#EE5A24',
-  '#0652DD','#9980FA','#C4E538','#FDA7DF','#D980FA',
-  '#12CBC4','#F9CA24','#6AB04C',
-];
-
-const SEED_PLACES = [
-  '서울','부산','대구','인천','광주','대전','울산','세종',
-  '경기','강원','충북','충남','전북','전남','경북','경남','제주',
-];
+const DB_PATH   = 'soccerPool';
+const ENTRY_FEE = 5000;
 
 let db;
-let places  = {};   // { id: { name, order, color } }
-let canvas, ctx;
-let wheelAngle = 0;
-let spinning   = false;
+let match = { teamA: 'A팀', teamB: 'B팀', status: 'open', finalScoreA: null, finalScoreB: null };
+let entries = {};   // { id: { name, scoreA, scoreB, createdAt } }
+
+let pickA = 0, pickB = 0;       // 참가 폼 선택값
+let settleA = 0, settleB = 0;   // 결과입력 폼 선택값
+let editingTeam = null;         // 'A' | 'B' | null — 팀명 편집 중 원격 갱신 방지
 
 // ── Init ─────────────────────────────────────────────────────────
 function init() {
   firebase.initializeApp(firebaseConfig);
   db = firebase.database();
 
-  canvas = document.getElementById('wheel');
-  ctx    = canvas.getContext('2d');
-  const size = Math.min(window.innerWidth - 32, 340);
-  canvas.width = canvas.height = size;
-
-  db.ref(`${DB_PATH}/places`).on('value', snap => {
+  db.ref(`${DB_PATH}/match`).on('value', snap => {
     const val = snap.val();
-    if (!val) { seedPlaces(); return; }
-    places = val;
-    renderPlaceList();
-    drawWheel();
-    updateSpinBtn();
+    if (!val) { db.ref(`${DB_PATH}/match`).set(match); return; }
+    match = val;
+    renderAll();
   });
 
-  document.getElementById('place-input')
-    .addEventListener('keydown', e => { if (e.key === 'Enter') addPlace(); });
-}
-
-function seedPlaces() {
-  const batch = {};
-  SEED_PLACES.forEach((name, i) => {
-    batch[`p_${String(i).padStart(2,'0')}`] = { name, order: i, color: COLORS[i % COLORS.length] };
+  db.ref(`${DB_PATH}/entries`).on('value', snap => {
+    entries = snap.val() || {};
+    renderAll();
   });
-  db.ref(`${DB_PATH}/places`).set(batch);
+
+  setupTeamNameEditing();
+
+  document.getElementById('name-input')
+    .addEventListener('keydown', e => { if (e.key === 'Enter') joinPool(); });
+
+  updatePickerDisplay();
+  updateSettleDisplay();
 }
 
-// ── Draw ─────────────────────────────────────────────────────────
-function drawWheel() {
-  const W = canvas.width;
-  const cx = W / 2, cy = W / 2, r = cx - 4;
-  ctx.clearRect(0, 0, W, W);
+function setupTeamNameEditing() {
+  ['A', 'B'].forEach(team => {
+    const el = document.getElementById(`team-${team.toLowerCase()}-name`);
+    el.addEventListener('focus', () => { editingTeam = team; });
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
+    el.addEventListener('blur', () => {
+      editingTeam = null;
+      const val = el.textContent.trim().slice(0, 10) || (team === 'A' ? 'A팀' : 'B팀');
+      el.textContent = val;
+      db.ref(`${DB_PATH}/match/team${team}`).set(val);
+    });
+  });
+}
 
-  const arr = sortedPlaces();
-  const n   = arr.length;
+// ── Render ───────────────────────────────────────────────────────
+function renderAll() {
+  renderStatusBanner();
+  renderScoreboardNames();
+  renderPoolInfo();
+  updateOddsHint();
+  renderOddsList();
+  renderEntryList();
+  updateJoinFormState();
+}
 
-  if (n === 0) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-    ctx.fillStyle = '#F1EDEC';
-    ctx.fill();
-    ctx.fillStyle = '#AAA';
-    ctx.font = `bold ${Math.round(r * 0.12)}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('장소를 추가하세요', cx, cy);
-    return;
+function renderStatusBanner() {
+  const el = document.getElementById('status-banner');
+  if (match.status === 'settled') {
+    el.className = 'status-banner settled';
+    el.textContent = `🏁 경기 종료 — 최종 스코어 ${match.finalScoreA} : ${match.finalScoreB}`;
+  } else {
+    el.className = 'status-banner';
+    el.textContent = '⚽ 예측 접수중';
   }
-
-  const seg = (2 * Math.PI) / n;
-
-  arr.forEach((p, i) => {
-    const a0 = wheelAngle + i * seg - Math.PI / 2;
-    const a1 = a0 + seg;
-
-    // Segment
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, r, a0, a1);
-    ctx.closePath();
-    ctx.fillStyle = p.color || COLORS[i % COLORS.length];
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Text
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(a0 + seg / 2);
-
-    const maxW  = r * 0.52;
-    const fSize = Math.min(15, Math.max(8, Math.floor(seg * r * 0.38)));
-    ctx.font = `bold ${fSize}px -apple-system, sans-serif`;
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,.3)';
-    ctx.shadowBlur  = 3;
-
-    let label = p.name;
-    while (ctx.measureText(label).width > maxW && label.length > 1) {
-      label = label.slice(0, -1);
-    }
-    if (label !== p.name) label += '…';
-
-    ctx.fillText(label, r - 12, 0);
-    ctx.restore();
-  });
-
-  // Center cap
-  ctx.beginPath();
-  ctx.arc(cx, cy, Math.max(10, r * 0.08), 0, 2 * Math.PI);
-  ctx.fillStyle = '#fff';
-  ctx.fill();
-  ctx.strokeStyle = '#DDD';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
 }
 
-// ── Spin ─────────────────────────────────────────────────────────
-function spin() {
-  const arr = sortedPlaces();
-  if (spinning || arr.length < 2) return;
-  spinning = true;
-  document.getElementById('spin-btn').disabled = true;
-
-  const n      = arr.length;
-  const seg    = (2 * Math.PI) / n;
-  const wIdx   = Math.floor(Math.random() * n);
-  const winner = arr[wIdx];
-
-  // Target: center of winning segment ends up at top (–π/2)
-  // After spinning, topAngle = -(wheelAngle % 2π) normalised → must equal wIdx*seg + seg/2
-  const jitter  = (Math.random() - 0.5) * seg * 0.55;
-  const target  = (2 * Math.PI - (wIdx * seg + seg / 2 + jitter));
-  const curNorm = ((wheelAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-  let   delta   = ((target - curNorm) + 2 * Math.PI) % (2 * Math.PI);
-  const extra   = (7 + Math.floor(Math.random() * 5)) * 2 * Math.PI;
-  const total   = extra + delta;
-
-  const t0  = performance.now();
-  const dur = 4200 + Math.random() * 1000;
-  const a0  = wheelAngle;
-
-  function ease(t) { return 1 - Math.pow(1 - t, 5); }
-
-  (function frame(now) {
-    const p = Math.min((now - t0) / dur, 1);
-    wheelAngle = a0 + total * ease(p);
-    drawWheel();
-    if (p < 1) { requestAnimationFrame(frame); return; }
-    wheelAngle = a0 + total;
-    spinning   = false;
-    drawWheel();
-    document.getElementById('spin-btn').disabled = false;
-    showResult(winner.name);
-    try { navigator.vibrate && navigator.vibrate([80, 40, 160]); } catch(_) {}
-  })(performance.now());
+function renderScoreboardNames() {
+  if (editingTeam !== 'A') document.getElementById('team-a-name').textContent = match.teamA;
+  if (editingTeam !== 'B') document.getElementById('team-b-name').textContent = match.teamB;
 }
 
-// ── Result ───────────────────────────────────────────────────────
-function showResult(name) {
-  document.getElementById('result-place').textContent = name;
-  document.getElementById('result-overlay').classList.remove('hidden');
-}
-function closeResult() {
-  document.getElementById('result-overlay').classList.add('hidden');
+function renderPoolInfo() {
+  const list = Object.values(entries);
+  document.getElementById('pool-count').textContent = `${list.length}명`;
+  document.getElementById('pool-total').textContent = `${(list.length * ENTRY_FEE).toLocaleString()}P`;
 }
 
-// ── CRUD ─────────────────────────────────────────────────────────
-function addPlace() {
-  const inp  = document.getElementById('place-input');
+// ── Score picker (join form) ────────────────────────────────────
+function step(team, delta) {
+  if (team === 'A') pickA = Math.min(20, Math.max(0, pickA + delta));
+  else pickB = Math.min(20, Math.max(0, pickB + delta));
+  updatePickerDisplay();
+  updateOddsHint();
+}
+function updatePickerDisplay() {
+  document.getElementById('pick-a-val').textContent = pickA;
+  document.getElementById('pick-b-val').textContent = pickB;
+}
+
+function updateOddsHint() {
+  const hint = document.getElementById('odds-hint');
+  const list = Object.values(entries);
+  const sameCount = list.filter(e => e.scoreA === pickA && e.scoreB === pickB).length;
+  const projectedPool = (list.length + 1) * ENTRY_FEE;
+  const projectedWinners = sameCount + 1;
+  const payout = Math.floor(projectedPool / projectedWinners);
+  hint.textContent = `이 스코어를 고른 사람 ${sameCount}명 → 지금 참가 시 예상 배당 약 ${payout.toLocaleString()}P`;
+}
+
+function updateJoinFormState() {
+  const btn = document.getElementById('join-btn');
+  const closed = match.status !== 'open';
+  btn.disabled = closed;
+  btn.textContent = closed ? '이미 종료된 경기입니다' : `참가하기 (${ENTRY_FEE.toLocaleString()}P)`;
+}
+
+// ── Join ─────────────────────────────────────────────────────────
+function joinPool() {
+  if (match.status !== 'open') { alert('이미 종료된 경기입니다.'); return; }
+  const inp  = document.getElementById('name-input');
   const name = inp.value.trim();
   if (!name) { inp.focus(); return; }
 
-  const order = Object.keys(places).length;
-  const color = COLORS[order % COLORS.length];
-  const id    = 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-  db.ref(`${DB_PATH}/places/${id}`).set({ name, order, color });
+  const id = 'e_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  db.ref(`${DB_PATH}/entries/${id}`).set({
+    name, scoreA: pickA, scoreB: pickB, createdAt: Date.now()
+  });
   inp.value = '';
-  inp.focus();
 }
 
-function deletePlace(id) {
-  const name = places[id]?.name;
-  if (!confirm(`"${name}" 을 삭제할까요?`)) return;
-  db.ref(`${DB_PATH}/places/${id}`).remove();
+function deleteEntry(id) {
+  const e = entries[id];
+  if (!e) return;
+  if (!confirm(`"${e.name}" 님의 예측(${e.scoreA}:${e.scoreB})을 삭제할까요?`)) return;
+  db.ref(`${DB_PATH}/entries/${id}`).remove();
 }
 
-function updateSpinBtn() {
-  const n = Object.keys(places).length;
-  document.getElementById('spin-btn').disabled = n < 2;
-  const hint = document.getElementById('spin-hint');
-  if (hint) hint.classList.toggle('hidden', n >= 2);
-}
+// ── Odds list ────────────────────────────────────────────────────
+function renderOddsList() {
+  const el = document.getElementById('odds-list');
+  const list = Object.values(entries);
 
-function sortedPlaces() {
-  return Object.entries(places)
-    .sort(([,a],[,b]) => (a.order||0) - (b.order||0))
-    .map(([,p]) => p);
-}
-
-function esc(s) {
-  return String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-}
-
-function renderPlaceList() {
-  const list = document.getElementById('place-list');
-  const arr  = Object.entries(places).sort(([,a],[,b]) => (a.order||0) - (b.order||0));
-
-  if (!arr.length) {
-    list.innerHTML = '<div class="empty-msg">아직 장소가 없어요.<br>추가해보세요!</div>';
+  if (!list.length) {
+    el.innerHTML = '<div class="empty-msg">아직 참가자가 없어요.</div>';
     return;
   }
-  list.innerHTML = arr.map(([id, p]) => `
-    <div class="place-item">
-      <div class="place-dot" style="background:${p.color||'#ccc'}"></div>
-      <div class="place-name">${esc(p.name)}</div>
-      <button class="place-del" onclick="deletePlace('${id}')">×</button>
-    </div>`).join('');
+
+  const pool = list.length * ENTRY_FEE;
+  const groups = {};
+  list.forEach(e => {
+    const key = `${e.scoreA}:${e.scoreB}`;
+    groups[key] = (groups[key] || 0) + 1;
+  });
+
+  const rows = Object.entries(groups).sort((a, b) => b[1] - a[1]);
+
+  el.innerHTML = rows.map(([score, count]) => {
+    const payout = Math.floor(pool / count);
+    return `
+      <div class="odds-item">
+        <div class="odds-score">${esc(score)}</div>
+        <div class="odds-count">${count}명 선택</div>
+        <div class="odds-payout">1인당 ${payout.toLocaleString()}P</div>
+      </div>`;
+  }).join('');
+}
+
+// ── Entry list ───────────────────────────────────────────────────
+function renderEntryList() {
+  const el = document.getElementById('entry-list');
+  const list = Object.entries(entries).sort(([,a],[,b]) => (a.createdAt||0) - (b.createdAt||0));
+
+  if (!list.length) {
+    el.innerHTML = '<div class="empty-msg">아직 참가자가 없어요.<br>스코어를 예측하고 참가해보세요!</div>';
+    return;
+  }
+
+  const settled = match.status === 'settled';
+  const pool = list.length * ENTRY_FEE;
+  const winnerIds = settled
+    ? list.filter(([,e]) => e.scoreA === match.finalScoreA && e.scoreB === match.finalScoreB).map(([id]) => id)
+    : [];
+  const payout = winnerIds.length ? Math.floor(pool / winnerIds.length) : 0;
+
+  el.innerHTML = list.map(([id, e]) => {
+    let cls = 'entry-item';
+    let payoutHtml = '';
+    if (settled) {
+      if (winnerIds.includes(id)) {
+        cls += ' winner';
+        payoutHtml = `<div class="entry-payout">🏆 ${payout.toLocaleString()}P</div>`;
+      } else {
+        cls += ' loser';
+      }
+    }
+    return `
+      <div class="${cls}">
+        <div class="entry-score">${e.scoreA}:${e.scoreB}</div>
+        <div class="entry-name">${esc(e.name)}</div>
+        ${payoutHtml}
+        <button class="entry-del" onclick="deleteEntry('${id}')">×</button>
+      </div>`;
+  }).join('');
+
+  if (settled && !winnerIds.length && list.length) {
+    el.innerHTML += '<div class="empty-msg">😢 적중자가 없습니다. 상금은 이월하거나 재정산이 필요해요.</div>';
+  }
+}
+
+// ── Settle (경기결과 입력) ────────────────────────────────────────
+function toggleSettlePanel() {
+  const panel = document.getElementById('settle-panel');
+  panel.classList.toggle('hidden');
+}
+
+function stepSettle(team, delta) {
+  if (team === 'A') settleA = Math.min(20, Math.max(0, settleA + delta));
+  else settleB = Math.min(20, Math.max(0, settleB + delta));
+  updateSettleDisplay();
+}
+function updateSettleDisplay() {
+  document.getElementById('settle-a-val').textContent = settleA;
+  document.getElementById('settle-b-val').textContent = settleB;
+}
+
+function settleMatch() {
+  if (!confirm(`최종 스코어를 ${settleA} : ${settleB} 로 확정할까요?`)) return;
+  db.ref(`${DB_PATH}/match`).update({
+    status: 'settled', finalScoreA: settleA, finalScoreB: settleB
+  });
+  document.getElementById('settle-panel').classList.add('hidden');
+}
+
+function resetMatch() {
+  if (!confirm('새 경기를 시작할까요? 현재 참가자 목록이 모두 삭제됩니다.')) return;
+  db.ref(`${DB_PATH}/entries`).remove();
+  db.ref(`${DB_PATH}/match`).update({ status: 'open', finalScoreA: null, finalScoreB: null });
+  settleA = 0; settleB = 0;
+  updateSettleDisplay();
+  document.getElementById('settle-panel').classList.add('hidden');
+}
+
+// ── Utils ────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 }
 
 init();
