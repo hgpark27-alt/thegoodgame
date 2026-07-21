@@ -1,5 +1,117 @@
+// ===== 로컬 전용 데이터 (구글 캘린더로 절대 안 올라감 — 이 컴퓨터에만 저장) =====
+// Electron이면 main 프로세스가 파일로 원자적 저장(Tack 방식), 브라우저 테스트 중이면 localStorage로 대체
+let localData = { recentTasks: [], personalTodos: [] };
+
+async function loadLocalData() {
+  if (window.api?.getLocalData) {
+    localData = await window.api.getLocalData();
+  } else {
+    try { localData = JSON.parse(localStorage.getItem('tkm_localdata') || '{}'); } catch { localData = {}; }
+  }
+  localData.recentTasks ??= [];
+  localData.personalTodos ??= [];
+}
+function persistLocalData() {
+  if (window.api?.saveLocalData) window.api.saveLocalData(localData);
+  else localStorage.setItem('tkm_localdata', JSON.stringify(localData));
+}
+
+function trackRecentTask(title) {
+  const t = (title || '').trim();
+  if (!t) return;
+  localData.recentTasks = [t, ...localData.recentTasks.filter(x => x !== t)].slice(0, 4);
+  persistLocalData();
+}
+
+function renderRecentChips() {
+  const wrap = $('#recentChips');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  localData.recentTasks.forEach(title => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'recent-chip';
+    chip.textContent = title;
+    chip.title = title;
+    chip.addEventListener('click', () => {
+      $('#fTitle').value = title;
+      onSaveEvent(); // 클릭 한 번으로 바로 저장 — 나머지는 지금 모달의 기본값 그대로
+    });
+    wrap.appendChild(chip);
+  });
+  resizeToContent();
+}
+
+function renderPersonalTodos() {
+  const list = $('#todoList');
+  list.innerHTML = '';
+  localData.personalTodos.forEach(todo => {
+    const li = document.createElement('li');
+    li.className = 'todo-item';
+
+    const check = document.createElement('button');
+    check.type = 'button';
+    check.className = 'todo-check' + (todo.done ? ' done' : '');
+    check.textContent = todo.done ? '✓' : '';
+    check.addEventListener('click', () => toggleTodo(todo.id));
+    li.appendChild(check);
+
+    const text = document.createElement('span');
+    text.className = 'todo-text' + (todo.done ? ' done' : '');
+    text.textContent = todo.text;
+    li.appendChild(text);
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'todo-del';
+    del.textContent = '×';
+    del.addEventListener('click', () => deleteTodo(todo.id));
+    li.appendChild(del);
+
+    list.appendChild(li);
+  });
+  resizeToContent();
+}
+
+function addPersonalTodo(text) {
+  const t = (text || '').trim();
+  if (!t) return;
+  localData.personalTodos.unshift({ id: 'todo-' + Date.now() + '-' + Math.random().toString(36).slice(2), text: t, done: false });
+  persistLocalData();
+  renderPersonalTodos();
+}
+function toggleTodo(id) {
+  const item = localData.personalTodos.find(x => x.id === id);
+  if (item) item.done = !item.done;
+  persistLocalData();
+  renderPersonalTodos();
+}
+function deleteTodo(id) {
+  localData.personalTodos = localData.personalTodos.filter(x => x.id !== id);
+  persistLocalData();
+  renderPersonalTodos();
+}
+
 // ===== 설정 =====
 const API_URL = 'https://script.google.com/macros/s/AKfycbybOFKkrFU7No0cJS1LG2rKVjXyTWcY5f2vYxEoEAPGWq6ckGBIPGACPcb0PrHP-Hb9yg/exec';
+const WIDGET_W = 304; // main/index.js의 창 너비와 일치
+const WIDGET_MAX_H = 700;
+
+// 항상 콘텐츠 크기만큼만 창을 차지하게 함(Electron 없으면 조용히 무시됨) — 모달/팝업은
+// #app의 형제 요소(position:fixed)라 #app 크기 관찰만으론 못 잡아서 열고닫을 때 직접 호출
+function resizeToContent() {
+  let target;
+  if ($('#modalBackdrop')?.classList.contains('open')) {
+    target = $('#modalBackdrop .modal').getBoundingClientRect().height + 24;
+  } else if ($('#recurringBackdrop')?.classList.contains('open')) {
+    target = $('#recurringBackdrop .modal').getBoundingClientRect().height + 24;
+  } else {
+    // getBoundingClientRect는 소수점까지 정확 — scrollHeight(정수 반올림)로는
+    // 6주짜리 달(그리드 6행)에서 반올림 오차가 누적돼 마지막 행이 잘리는 문제가 있었음
+    target = document.getElementById('app').getBoundingClientRect().height;
+  }
+  window.api?.resize?.(WIDGET_W, Math.min(Math.ceil(Math.max(target, 120)) + 6, WIDGET_MAX_H));
+}
 
 const DOT_COLOR = { // colorId → CSS 변수 (style.css의 --c1~--c11과 매칭)
   '1':'--c1','2':'--c2','3':'--c3','4':'--c4','5':'--c5','6':'--c6',
@@ -104,6 +216,17 @@ async function init() {
   loadViewMode();
   bindEvents(); // 네트워크 기다리지 않고 바로 상호작용 가능하게
 
+  // 로컬 전용 데이터(최근 업무, 개인 할일) — 네트워크 필요 없이 바로 로드
+  await loadLocalData();
+  renderPersonalTodos();
+
+  // #app 크기가 바뀔 때마다(그리드/일정목록 등 무엇이 원인이든) 자동으로 창 크기 맞춤
+  let resizeRaf = null;
+  new ResizeObserver(() => {
+    if (resizeRaf) return;
+    resizeRaf = requestAnimationFrame(() => { resizeRaf = null; resizeToContent(); });
+  }).observe(document.getElementById('app'));
+
   // 카테고리는 백그라운드 로드 — "+" 모달 열기 전까지는 필요 없음
   apiGet({ action: 'categories' }).then(catRes => {
     if (catRes.ok) state.categories = catRes.categories;
@@ -124,22 +247,54 @@ function renderAll() {
   renderMonthTitle();
   renderGrid();
   renderDayPanel();
+  resizeToContent();
+  // 폰트/서브픽셀 레이아웃이 한 프레임 늦게 안정되는 경우를 대비한 안전망 재측정
+  setTimeout(resizeToContent, 50);
 }
 
-async function loadMonth() {
-  const isNewMonth = state.loadedYear !== state.year || state.loadedMonth !== state.month;
-  if (isNewMonth) {
-    state.events = []; // 다른 달로 이동 — 직전 달의 점이 잘못 보이지 않도록 비움
-    renderAll();         // 날짜 그리드는 서버 응답 없이도 즉시 그릴 수 있음 — 빈 화면 방지
-  }
-  // 같은 달을 재동기화하는 경우(예: 저장 직후)는 낙관적으로 이미 보여준 내용을
-  // 지웠다 다시 채우며 깜빡이지 않도록, 새 데이터가 올 때까지 기존 화면 유지
+// 달 단위 캐시 — 한 번 본 달은 재방문 시 네트워크 기다리지 않고 즉시 표시,
+// 백그라운드에서 조용히 재검증만 함(다른 사람이 바꾼 내용 반영). 이동할 때마다
+// 매번 새로 받아오던 이전 방식이 버벅거림의 원인이었음.
+const monthCache = new Map(); // 'YYYY-M' → events[]
+let loadToken = 0; // 그 사이 다른 달로 이동하면 늦게 도착한 응답을 버리기 위한 토큰
 
-  const res = await apiGet({ action: 'list', year: state.year, month: state.month });
-  state.events = res.ok ? res.events : [];
-  state.loadedYear = state.year;
-  state.loadedMonth = state.month;
-  renderAll(); // 실제 일정(점) 도착하면 반영
+function monthKey(y, m) { return `${y}-${m}`; }
+
+async function loadMonth() {
+  const myToken = ++loadToken;
+  const y = state.year, m = state.month;
+  const key = monthKey(y, m);
+
+  const cached = monthCache.get(key);
+  if (cached) {
+    state.events = cached; // 캐시 있으면 네트워크 없이 즉시 표시
+  } else if (state.loadedYear !== y || state.loadedMonth !== m) {
+    state.events = []; // 처음 보는 달이라 어쩔 수 없이 비워서 표시(다른 달 점이 잘못 보이는 것 방지)
+  }
+  state.loadedYear = y; state.loadedMonth = m;
+  renderAll();
+
+  const res = await apiGet({ action: 'list', year: y, month: m });
+  if (myToken !== loadToken) return; // 응답 오는 사이 다른 달로 이동함 — 이 결과는 폐기
+  if (res.ok) {
+    monthCache.set(key, res.events);
+    state.events = res.events;
+    renderAll();
+  }
+
+  prefetchAdjacentMonths(y, m);
+}
+
+function prefetchAdjacentMonths(y, m) {
+  const prev = m <= 1 ? { y: y - 1, m: 12 } : { y, m: m - 1 };
+  const next = m >= 12 ? { y: y + 1, m: 1 } : { y, m: m + 1 };
+  [prev, next].forEach(({ y: py, m: pm }) => {
+    const key = monthKey(py, pm);
+    if (monthCache.has(key)) return; // 이미 있으면 다시 안 받음
+    apiGet({ action: 'list', year: py, month: pm }).then(res => {
+      if (res.ok) monthCache.set(key, res.events);
+    });
+  });
 }
 
 // ===== 렌더링: 상단 타이틀 =====
@@ -286,7 +441,7 @@ function renderDayPanel() {
 
   const dayEvents = state.events.filter(ev => ev.date === state.selectedDate);
   if (!dayEvents.length) {
-    list.innerHTML = '<li class="empty-hint">No events on this date</li>';
+    // 안내 문구 대신 그냥 비워둠 — 창 높이가 자동으로 그만큼 줄어듦
     return;
   }
 
@@ -423,8 +578,10 @@ function openAddModal() {
   $('#untilRow').hidden = true;
   setHint('');
   renderCatChips();
+  renderRecentChips();
   $('#weekdayPicker').querySelectorAll('button').forEach(b => b.classList.remove('active'));
   $('#modalBackdrop').classList.add('open');
+  resizeToContent();
 }
 
 function openEditModal(ev) {
@@ -441,7 +598,9 @@ function openEditModal(ev) {
   $('#untilRow').hidden = true;
   setHint(ev.isRecurring ? 'Recurring event — only this date will be changed. (To change the repeat pattern, delete and re-add.)' : '', 'info');
   renderCatChips(ev.category);
+  $('#recentChips').innerHTML = ''; // 수정 모드에서는 최근 업무 추천 안 보여줌
   $('#modalBackdrop').classList.add('open');
+  resizeToContent();
 }
 
 // 반복 유형이 '매주'/'격주'가 됐을 때, 아직 아무 요일도 안 골랐으면 선택한 날짜의 요일을 기본 체크
@@ -452,7 +611,7 @@ function preselectWeekdayIfEmpty() {
   const btn = picker.querySelector(`button[data-day="${dow}"]`);
   if (btn) btn.classList.add('active');
 }
-function closeAddModal() { $('#modalBackdrop').classList.remove('open'); }
+function closeAddModal() { $('#modalBackdrop').classList.remove('open'); resizeToContent(); }
 
 async function onSaveEvent() {
   const title = $('#fTitle').value.trim();
@@ -517,6 +676,7 @@ async function onSaveEvent() {
     return;
   }
 
+  trackRecentTask(title);
   // 성공 — 실제 서버 상태로 재동기화(반복 일정이면 다른 달 확장분까지 정확히 반영됨)
   await loadMonth();
 }
@@ -588,10 +748,12 @@ async function openRecurringModal() {
   $('#recurringBackdrop').classList.add('open');
   const list = $('#recurringList');
   list.innerHTML = '<li class="empty-hint">Loading...</li>';
+  resizeToContent();
 
   const res = await apiGet({ action: 'list-recurring' });
-  if (!res.ok) { list.innerHTML = '<li class="empty-hint">Failed to load</li>'; return; }
+  if (!res.ok) { list.innerHTML = '<li class="empty-hint">Failed to load</li>'; resizeToContent(); return; }
   renderRecurringList(res.series);
+  resizeToContent();
 }
 
 function renderRecurringList(series) {
@@ -679,12 +841,22 @@ function bindEvents() {
     if (e.key === 'Enter') { e.preventDefault(); onSaveEvent(); }
   });
 
+  // 개인 할일(로컬 전용) — 입력 후 엔터로 추가
+  $('#todoInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addPersonalTodo($('#todoInput').value);
+      $('#todoInput').value = '';
+    }
+  });
+
   $('#fRepeat').addEventListener('change', (e) => {
     const v = e.target.value;
     $('#biweeklyRow').hidden = !(v === 'weekly' || v === 'biweekly');
     $('#customRow').hidden = v !== 'custom';
     $('#untilRow').hidden = v === 'none';
     if (v === 'weekly' || v === 'biweekly') preselectWeekdayIfEmpty();
+    resizeToContent();
   });
 
   $('#fDate').addEventListener('change', () => {
@@ -698,27 +870,40 @@ function bindEvents() {
     if (btn) btn.classList.toggle('active');
   });
 
+  // ── 수동 새로고침 ──
+  $('#refreshBtn').addEventListener('click', () => {
+    const icon = $('#refreshBtn');
+    icon.classList.add('spinning');
+    monthCache.delete(monthKey(state.year, state.month)); // 캐시 무시하고 강제로 다시 받아옴
+    apiGet({ action: 'categories' }).then(catRes => { if (catRes.ok) state.categories = catRes.categories; });
+    loadMonth().finally(() => icon.classList.remove('spinning'));
+  });
+
   // ── 설정 팝업 ──
   const closePopover = () => {
     $('#settingsPopover').classList.remove('open');
     $('#popoverBackdrop').classList.remove('open');
+    resizeToContent();
   };
   $('#gearBtn').addEventListener('click', (e) => {
     e.stopPropagation();
     $('#settingsPopover').classList.toggle('open');
     $('#popoverBackdrop').classList.toggle('open');
+    resizeToContent();
   });
   $('#popoverBackdrop').addEventListener('click', closePopover);
 
   $('#settingsPopover').addEventListener('click', (e) => {
-    const themeBtn = e.target.closest('[data-theme]');
+    // .popover-item로 범위를 좁혀야 함 — 다크/Tack 테마에서는 <html data-theme="dark">가 붙어서
+    // 그냥 '[data-theme]'로 찾으면 <html> 자신이 조상으로 매치되어 뷰모드 클릭까지 테마 분기로 새버렸음
+    const themeBtn = e.target.closest('.popover-item[data-theme]');
     if (themeBtn) {
       applyTheme(themeBtn.dataset.theme);
       localStorage.setItem('tkm_theme', themeBtn.dataset.theme);
       closePopover();
       return;
     }
-    const viewBtn = e.target.closest('[data-view]');
+    const viewBtn = e.target.closest('.popover-item[data-view]');
     if (viewBtn) {
       applyViewMode(viewBtn.dataset.view);
       localStorage.setItem('tkm_viewmode', viewBtn.dataset.view);
@@ -731,24 +916,26 @@ function bindEvents() {
     closePopover();
     openRecurringModal();
   });
-  $('#closeRecurring').addEventListener('click', () => $('#recurringBackdrop').classList.remove('open'));
+  $('#closeRecurring').addEventListener('click', () => { $('#recurringBackdrop').classList.remove('open'); resizeToContent(); });
   $('#recurringBackdrop').addEventListener('click', (e) => {
-    if (e.target.id === 'recurringBackdrop') $('#recurringBackdrop').classList.remove('open');
+    if (e.target.id === 'recurringBackdrop') { $('#recurringBackdrop').classList.remove('open'); resizeToContent(); }
   });
 
   $('#dayPanelToggle').addEventListener('click', () => {
     state.dayPanelCollapsed = !state.dayPanelCollapsed;
     updateDayPanelVisibility();
+    resizeToContent();
   });
 
   // ── 창 컨트롤 (Electron 연결 전까지는 window.api가 없어 조용히 무시됨) ──
+  // 핀 고정 상태일 때는 비어있는(무채색) 아이콘, 고정 안 됐을 때만 강조색 — Tack과 동일한 관례
   $('#pinBtn').addEventListener('click', async () => {
     const pinned = await window.api?.togglePin?.();
-    if (pinned !== undefined) $('#pinBtn').classList.toggle('active', pinned);
+    if (pinned !== undefined) $('#pinBtn').classList.toggle('active', !pinned);
   });
   $('#minimizeBtn').addEventListener('click', () => window.api?.winMinimize?.());
   $('#closeBtn').addEventListener('click', () => window.api?.winClose?.());
-  window.api?.getPin?.().then(p => { if (p !== undefined) $('#pinBtn').classList.toggle('active', p); });
+  window.api?.getPin?.().then(p => { if (p !== undefined) $('#pinBtn').classList.toggle('active', !p); });
 }
 
 init();
