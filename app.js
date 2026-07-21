@@ -1,244 +1,754 @@
-// ================================================================
-//  ⚽ 스코어 예측 — 승부예측 상금풀 앱
-// ================================================================
-const DB_PATH   = 'soccerPool';
-const ENTRY_FEE = 5000;
+// ===== 설정 =====
+const API_URL = 'https://script.google.com/macros/s/AKfycbybOFKkrFU7No0cJS1LG2rKVjXyTWcY5f2vYxEoEAPGWq6ckGBIPGACPcb0PrHP-Hb9yg/exec';
 
-let db;
-let match = { teamA: 'A팀', teamB: 'B팀', status: 'open', finalScoreA: null, finalScoreB: null };
-let entries = {};   // { id: { name, scoreA, scoreB, createdAt } }
-
-let pickA = 0, pickB = 0;       // 참가 폼 선택값
-let settleA = 0, settleB = 0;   // 결과입력 폼 선택값
-let editingTeam = null;         // 'A' | 'B' | null — 팀명 편집 중 원격 갱신 방지
-
-// ── Init ─────────────────────────────────────────────────────────
-function init() {
-  firebase.initializeApp(firebaseConfig);
-  db = firebase.database();
-
-  db.ref(`${DB_PATH}/match`).on('value', snap => {
-    const val = snap.val();
-    if (!val) { db.ref(`${DB_PATH}/match`).set(match); return; }
-    match = val;
-    renderAll();
-  });
-
-  db.ref(`${DB_PATH}/entries`).on('value', snap => {
-    entries = snap.val() || {};
-    renderAll();
-  });
-
-  setupTeamNameEditing();
-
-  document.getElementById('name-input')
-    .addEventListener('keydown', e => { if (e.key === 'Enter') joinPool(); });
-
-  updatePickerDisplay();
-  updateSettleDisplay();
+const DOT_COLOR = { // colorId → CSS 변수 (style.css의 --c1~--c11과 매칭)
+  '1':'--c1','2':'--c2','3':'--c3','4':'--c4','5':'--c5','6':'--c6',
+  '7':'--c7','8':'--c8','9':'--c9','10':'--c10','11':'--c11'
+};
+// 카테고리 지정 안 한 일정은 흰 점(테두리만) — 실제 카테고리가 있는 경우만 색 채움
+function dotStyle(dot, ev) {
+  if (!ev.category) dot.classList.add('dot-none');
+  else dot.style.background = `var(${DOT_COLOR[ev.colorId] || '--c8'})`;
 }
 
-function setupTeamNameEditing() {
-  ['A', 'B'].forEach(team => {
-    const el = document.getElementById(`team-${team.toLowerCase()}-name`);
-    el.addEventListener('focus', () => { editingTeam = team; });
-    el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
-    el.addEventListener('blur', () => {
-      editingTeam = null;
-      const val = el.textContent.trim().slice(0, 10) || (team === 'A' ? 'A팀' : 'B팀');
-      el.textContent = val;
-      db.ref(`${DB_PATH}/match/team${team}`).set(val);
-    });
+// ===== 상태 =====
+const state = {
+  year: 2026, month: 7,     // 서버 시간 기준으로 init()에서 즉시 갱신됨
+  selectedDate: null,       // 'YYYY-MM-DD'
+  events: [],               // 이번 달 이벤트 전체
+  categories: {},           // { '미팅': '9', ... } — 백엔드에서 로드
+  loadedYear: null, loadedMonth: null, // 마지막으로 실제 로드 완료한 달 (같은 달 재동기화 시 깜빡임 방지용)
+  editingId: null,          // null이면 추가 모드, 값이 있으면 그 이벤트를 수정 중
+  viewMode: 'simple',       // 'simple' | 'max'
+  dayPanelCollapsed: false, // 최대 모드에서만 의미 있음 (간단 모드는 항상 펼침)
+};
+
+const $ = (sel) => document.querySelector(sel);
+const pad2 = (n) => String(n).padStart(2, '0');
+const dateKey = (y, m, d) => `${y}-${pad2(m)}-${pad2(d)}`;
+const todayKey = () => { const d = new Date(); return dateKey(d.getFullYear(), d.getMonth()+1, d.getDate()); };
+
+const WEEKDAY_ABBR = ['SU','MO','TU','WE','TH','FR','SA'];
+const MONTH_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const WEEKDAY_EN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const weekdayOf = (dateStr) => {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return WEEKDAY_ABBR[new Date(y, m - 1, d).getDay()];
+};
+
+// ===== API 호출 =====
+async function apiGet(params) {
+  // 조회 URL이 매번 동일해서 브라우저가 캐시된 응답을 재사용할 수 있음 — 매 호출 고유 값으로 무효화
+  const q = new URLSearchParams({ ...params, _: Date.now() }).toString();
+  const r = await fetch(`${API_URL}?${q}`, { cache: 'no-store' });
+  return r.json();
+}
+async function apiPost(body) {
+  const r = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // CORS preflight 회피
+    body: JSON.stringify(body)
   });
+  return r.json();
 }
 
-// ── Render ───────────────────────────────────────────────────────
+function setHint(msg, type) {
+  const el = $('#formHint');
+  el.textContent = msg;
+  el.className = 'hint' + (type ? ' ' + type : '');
+}
+
+// ===== 테마 =====
+const THEMES = ['light', 'dark', 'tack'];
+function applyTheme(theme) {
+  if (theme === 'light') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+  document.querySelectorAll('.popover-item[data-theme]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.theme === theme);
+  });
+}
+function loadTheme() {
+  const saved = localStorage.getItem('tkm_theme');
+  applyTheme(THEMES.includes(saved) ? saved : 'light');
+}
+
+// ===== 보기 모드 (간단/최대) =====
+function applyViewMode(mode) {
+  state.viewMode = mode;
+  state.dayPanelCollapsed = (mode === 'max'); // 최대 모드는 기본 접힘, 간단 모드는 항상 펼침
+  document.querySelectorAll('.popover-item[data-view]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === mode);
+  });
+  $('#dayPanelToggle').hidden = (mode !== 'max');
+  updateDayPanelVisibility();
+  renderGrid();
+}
+function loadViewMode() {
+  const saved = localStorage.getItem('tkm_viewmode');
+  applyViewMode(saved === 'max' ? 'max' : 'simple');
+}
+function updateDayPanelVisibility() {
+  const collapsed = state.viewMode === 'max' && state.dayPanelCollapsed;
+  $('#dayPanel').classList.toggle('collapsed', collapsed);
+  $('#dayPanelToggle').textContent = collapsed ? 'Show list ▾' : 'Hide ▴';
+}
+
+// ===== 초기화 =====
+async function init() {
+  const now = new Date();
+  state.year = now.getFullYear();
+  state.month = now.getMonth() + 1;
+  state.selectedDate = todayKey();
+
+  loadTheme();
+  loadViewMode();
+  bindEvents(); // 네트워크 기다리지 않고 바로 상호작용 가능하게
+
+  // 카테고리는 백그라운드 로드 — "+" 모달 열기 전까지는 필요 없음
+  apiGet({ action: 'categories' }).then(catRes => {
+    if (catRes.ok) state.categories = catRes.categories;
+  });
+
+  // 다른 팀원이 네이티브 캘린더에서 바꾼 내용을 자동 반영 — 진짜 웹훅 대신 가벼운 폴링/포커스 갱신
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') loadMonth();
+  });
+  setInterval(() => {
+    if (document.visibilityState === 'visible') loadMonth();
+  }, 120000); // Apps Script 일일 실행시간 할당량 여유를 위해 2분 간격
+
+  await loadMonth();
+}
+
 function renderAll() {
-  renderStatusBanner();
-  renderScoreboardNames();
-  renderPickerLabels();
-  renderPoolInfo();
-  updateOddsHint();
-  renderOddsList();
-  renderEntryList();
-  updateJoinFormState();
+  renderMonthTitle();
+  renderGrid();
+  renderDayPanel();
 }
 
-function renderStatusBanner() {
-  const el = document.getElementById('status-banner');
-  if (match.status === 'settled') {
-    el.className = 'status-banner settled';
-    el.textContent = `🏁 경기 종료 — 최종 스코어 ${match.teamA} ${match.finalScoreA} : ${match.finalScoreB} ${match.teamB}`;
-  } else {
-    el.className = 'status-banner';
-    el.textContent = '⚽ 예측 접수중';
+async function loadMonth() {
+  const isNewMonth = state.loadedYear !== state.year || state.loadedMonth !== state.month;
+  if (isNewMonth) {
+    state.events = []; // 다른 달로 이동 — 직전 달의 점이 잘못 보이지 않도록 비움
+    renderAll();         // 날짜 그리드는 서버 응답 없이도 즉시 그릴 수 있음 — 빈 화면 방지
   }
+  // 같은 달을 재동기화하는 경우(예: 저장 직후)는 낙관적으로 이미 보여준 내용을
+  // 지웠다 다시 채우며 깜빡이지 않도록, 새 데이터가 올 때까지 기존 화면 유지
+
+  const res = await apiGet({ action: 'list', year: state.year, month: state.month });
+  state.events = res.ok ? res.events : [];
+  state.loadedYear = state.year;
+  state.loadedMonth = state.month;
+  renderAll(); // 실제 일정(점) 도착하면 반영
 }
 
-function renderScoreboardNames() {
-  if (editingTeam !== 'A') document.getElementById('team-a-name').textContent = match.teamA;
-  if (editingTeam !== 'B') document.getElementById('team-b-name').textContent = match.teamB;
+// ===== 렌더링: 상단 타이틀 =====
+function renderMonthTitle() {
+  $('#monthTitle').textContent = `${MONTH_EN[state.month - 1]} ${state.year}`;
 }
 
-function renderPickerLabels() {
-  document.getElementById('pick-a-label').textContent = match.teamA;
-  document.getElementById('pick-b-label').textContent = match.teamB;
-  document.getElementById('settle-a-label').textContent = match.teamA;
-  document.getElementById('settle-b-label').textContent = match.teamB;
-}
+// ===== 렌더링: 월간 그리드 =====
+function renderGrid() {
+  const grid = $('#grid');
+  grid.innerHTML = '';
+  grid.className = 'grid mode-' + state.viewMode;
 
-function renderPoolInfo() {
-  const list = Object.values(entries);
-  document.getElementById('pool-count').textContent = `${list.length}명`;
-  document.getElementById('pool-total').textContent = `₩${(list.length * ENTRY_FEE).toLocaleString()}`;
-}
+  const firstDow = new Date(state.year, state.month - 1, 1).getDay(); // 0=일
+  const daysInMonth = new Date(state.year, state.month, 0).getDate();
+  const daysInPrevMonth = new Date(state.year, state.month - 1, 0).getDate();
 
-// ── Score picker (join form) ────────────────────────────────────
-function step(team, delta) {
-  if (team === 'A') pickA = Math.min(20, Math.max(0, pickA + delta));
-  else pickB = Math.min(20, Math.max(0, pickB + delta));
-  updatePickerDisplay();
-  updateOddsHint();
-}
-function updatePickerDisplay() {
-  document.getElementById('pick-a-val').textContent = pickA;
-  document.getElementById('pick-b-val').textContent = pickB;
-}
-
-function updateOddsHint() {
-  const hint = document.getElementById('odds-hint');
-  const list = Object.values(entries);
-  const sameCount = list.filter(e => e.scoreA === pickA && e.scoreB === pickB).length;
-  const projectedPool = (list.length + 1) * ENTRY_FEE;
-  const projectedWinners = sameCount + 1;
-  const payout = Math.floor(projectedPool / projectedWinners);
-  hint.textContent = `이 스코어를 고른 사람 ${sameCount}명 → 지금 참가 시 예상 배당 약 ₩${payout.toLocaleString()}`;
-}
-
-function updateJoinFormState() {
-  const btn = document.getElementById('join-btn');
-  const closed = match.status !== 'open';
-  btn.disabled = closed;
-  btn.textContent = closed ? '이미 종료된 경기입니다' : `참가하기 (₩${ENTRY_FEE.toLocaleString()})`;
-}
-
-// ── Join ─────────────────────────────────────────────────────────
-function joinPool() {
-  if (match.status !== 'open') { alert('이미 종료된 경기입니다.'); return; }
-  const inp  = document.getElementById('name-input');
-  const name = inp.value.trim();
-  if (!name) { inp.focus(); return; }
-
-  const id = 'e_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-  db.ref(`${DB_PATH}/entries/${id}`).set({
-    name, scoreA: pickA, scoreB: pickB, createdAt: Date.now()
-  });
-  inp.value = '';
-}
-
-// ── Odds list ────────────────────────────────────────────────────
-function renderOddsList() {
-  const el = document.getElementById('odds-list');
-  const list = Object.values(entries);
-
-  if (!list.length) {
-    el.innerHTML = '<div class="empty-msg">아직 참가자가 없어요.</div>';
-    return;
+  const eventsByDate = {};
+  for (const ev of state.events) {
+    (eventsByDate[ev.date] ??= []).push(ev);
   }
 
-  const pool = list.length * ENTRY_FEE;
-  const groups = {};
-  list.forEach(e => {
-    const key = `${e.scoreA}:${e.scoreB}`;
-    groups[key] = (groups[key] || 0) + 1;
-  });
-
-  const rows = Object.entries(groups).sort((a, b) => b[1] - a[1]);
-
-  el.innerHTML = rows.map(([score, count]) => {
-    const [sa, sb] = score.split(':');
-    const payout = Math.floor(pool / count);
-    return `
-      <div class="odds-item">
-        <div class="odds-score">${esc(match.teamA)} ${sa} : ${sb} ${esc(match.teamB)}</div>
-        <div class="odds-meta">
-          <div class="odds-count">${count}명 선택</div>
-          <div class="odds-payout">1인당 ₩${payout.toLocaleString()}</div>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-// ── Entry list ───────────────────────────────────────────────────
-function renderEntryList() {
-  const el = document.getElementById('entry-list');
-  const list = Object.entries(entries).sort(([,a],[,b]) => (a.createdAt||0) - (b.createdAt||0));
-
-  if (!list.length) {
-    el.innerHTML = '<div class="empty-msg">아직 참가자가 없어요.<br>스코어를 예측하고 참가해보세요!</div>';
-    return;
+  const cells = [];
+  // 이전 달 채우기
+  for (let i = firstDow - 1; i >= 0; i--) {
+    cells.push({ day: daysInPrevMonth - i, outside: true });
   }
+  // 이번 달
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push({ day: d, outside: false });
+  }
+  // 다음 달로 6주(42칸) 채우기
+  let next = 1;
+  while (cells.length < 42) cells.push({ day: next++, outside: true, isNext: true });
 
-  const settled = match.status === 'settled';
-  const pool = list.length * ENTRY_FEE;
-  const winnerIds = settled
-    ? list.filter(([,e]) => e.scoreA === match.finalScoreA && e.scoreB === match.finalScoreB).map(([id]) => id)
-    : [];
-  const payout = winnerIds.length ? Math.floor(pool / winnerIds.length) : 0;
+  const tKey = todayKey();
 
-  el.innerHTML = list.map(([id, e]) => {
-    let cls = 'entry-item';
-    let payoutHtml = '';
-    if (settled) {
-      if (winnerIds.includes(id)) {
-        cls += ' winner';
-        payoutHtml = `<div class="entry-payout">🏆 ₩${payout.toLocaleString()}</div>`;
+  cells.forEach(cellInfo => {
+    const div = document.createElement('div');
+    div.className = 'cell';
+
+    let key;
+    if (cellInfo.outside && !cellInfo.isNext) {
+      const pm = state.month - 1 <= 0 ? 12 : state.month - 1;
+      const py = state.month - 1 <= 0 ? state.year - 1 : state.year;
+      key = dateKey(py, pm, cellInfo.day);
+      div.classList.add('outside');
+    } else if (cellInfo.outside && cellInfo.isNext) {
+      const nm = state.month + 1 > 12 ? 1 : state.month + 1;
+      const ny = state.month + 1 > 12 ? state.year + 1 : state.year;
+      key = dateKey(ny, nm, cellInfo.day);
+      div.classList.add('outside');
+    } else {
+      key = dateKey(state.year, state.month, cellInfo.day);
+      const dow = new Date(state.year, state.month - 1, cellInfo.day).getDay();
+      if (dow === 0) div.classList.add('sun');
+      if (dow === 6) div.classList.add('sat');
+    }
+
+    if (key === tKey) div.classList.add('today');
+    if (key === state.selectedDate) div.classList.add('selected');
+
+    const num = document.createElement('div');
+    num.className = 'daynum';
+    num.textContent = cellInfo.day;
+    div.appendChild(num);
+
+    const dayEvents = eventsByDate[key] || [];
+    if (dayEvents.length) {
+      if (state.viewMode === 'max') {
+        const chipsWrap = document.createElement('div');
+        chipsWrap.className = 'chips-wrap';
+        dayEvents.slice(0, 3).forEach(ev => {
+          const row = document.createElement('div');
+          row.className = 'chip-row';
+          const dot = document.createElement('span');
+          dot.className = 'dot';
+          dotStyle(dot, ev);
+          const text = document.createElement('span');
+          text.className = 'chip-text';
+          text.textContent = ev.title;
+          row.append(dot, text);
+          chipsWrap.appendChild(row);
+        });
+        if (dayEvents.length > 3) {
+          const more = document.createElement('div');
+          more.className = 'chip-more';
+          more.textContent = `+${dayEvents.length - 3} more`;
+          chipsWrap.appendChild(more);
+        }
+        div.appendChild(chipsWrap);
       } else {
-        cls += ' loser';
+        const dotsWrap = document.createElement('div');
+        dotsWrap.className = 'dots';
+        dayEvents.slice(0, 3).forEach(ev => {
+          const dot = document.createElement('span');
+          dot.className = 'dot';
+          dotStyle(dot, ev);
+          dotsWrap.appendChild(dot);
+        });
+        if (dayEvents.length > 3) {
+          const more = document.createElement('span');
+          more.className = 'dot-more';
+          more.textContent = `+${dayEvents.length - 3}`;
+          dotsWrap.appendChild(more);
+        }
+        div.appendChild(dotsWrap);
       }
     }
-    return `
-      <div class="${cls}">
-        <div class="entry-score">${esc(match.teamA)} ${e.scoreA} : ${e.scoreB} ${esc(match.teamB)}</div>
-        <div class="entry-main">
-          <div class="entry-name">${esc(e.name)}</div>
-          ${payoutHtml}
-        </div>
-      </div>`;
-  }).join('');
 
-  if (settled && !winnerIds.length && list.length) {
-    el.innerHTML += '<div class="empty-msg">😢 적중자가 없습니다. 상금은 이월하거나 재정산이 필요해요.</div>';
-  }
-}
+    div.addEventListener('click', () => {
+      state.selectedDate = key;
+      if (state.viewMode === 'max') {
+        state.dayPanelCollapsed = false; // 날짜 클릭하면 자세히 보기 자동으로 펼침
+        updateDayPanelVisibility();
+      }
+      renderGrid();
+      renderDayPanel();
+    });
 
-// ── Settle (경기결과 입력) ────────────────────────────────────────
-function toggleSettlePanel() {
-  const panel = document.getElementById('settle-panel');
-  panel.classList.toggle('hidden');
-}
+    div.addEventListener('dblclick', () => {
+      state.selectedDate = key; // openAddModal이 이 값을 날짜 기본값으로 사용
+      openAddModal();
+    });
 
-function stepSettle(team, delta) {
-  if (team === 'A') settleA = Math.min(20, Math.max(0, settleA + delta));
-  else settleB = Math.min(20, Math.max(0, settleB + delta));
-  updateSettleDisplay();
-}
-function updateSettleDisplay() {
-  document.getElementById('settle-a-val').textContent = settleA;
-  document.getElementById('settle-b-val').textContent = settleB;
-}
-
-function settleMatch() {
-  if (!confirm(`최종 스코어를 ${settleA} : ${settleB} 로 확정할까요?`)) return;
-  db.ref(`${DB_PATH}/match`).update({
-    status: 'settled', finalScoreA: settleA, finalScoreB: settleB
+    grid.appendChild(div);
   });
-  document.getElementById('settle-panel').classList.add('hidden');
 }
 
-// ── Utils ────────────────────────────────────────────────────────
-function esc(s) {
-  return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// ===== 렌더링: 하단 일정 패널 =====
+function renderDayPanel() {
+  const label = $('#selectedDateLabel');
+  const list = $('#eventList');
+  list.innerHTML = '';
+
+  if (!state.selectedDate) {
+    label.textContent = 'Select a date';
+    return;
+  }
+
+  const [y, m, d] = state.selectedDate.split('-').map(Number);
+  const dow = WEEKDAY_EN[new Date(y, m-1, d).getDay()];
+  label.textContent = `${dow}, ${MONTH_EN[m - 1]} ${d}`;
+
+  const dayEvents = state.events.filter(ev => ev.date === state.selectedDate);
+  if (!dayEvents.length) {
+    list.innerHTML = '<li class="empty-hint">No events on this date</li>';
+    return;
+  }
+
+  dayEvents.forEach(ev => {
+    const li = document.createElement('li');
+    li.className = 'event-row clickable';
+
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dotStyle(dot, ev);
+    li.appendChild(dot);
+
+    const body = document.createElement('div');
+    body.className = 'event-body';
+
+    const title = document.createElement('span');
+    title.className = 'event-title';
+    title.textContent = ev.title;
+    body.appendChild(title);
+
+    // 둘째 줄: 시간(있으면 강조색) · 카테고리 · 작성자 · 반복표시
+    const meta = document.createElement('span');
+    meta.className = 'event-meta';
+    if (!ev.allDay && ev.time) {
+      const timeEl = document.createElement('span');
+      timeEl.className = 'event-time';
+      timeEl.textContent = ev.time;
+      meta.appendChild(timeEl);
+    }
+    const rest = [ev.category, ev.author, ev.isRecurring ? '↻ 반복' : ''].filter(Boolean).join(' · ');
+    if (rest) meta.appendChild(document.createTextNode((!ev.allDay && ev.time ? ' · ' : '') + rest));
+    body.appendChild(meta);
+
+    li.appendChild(body);
+
+    const del = document.createElement('button');
+    del.className = 'event-del';
+    del.textContent = '×';
+    del.addEventListener('click', (e) => { e.stopPropagation(); onDelete(ev); });
+    li.appendChild(del);
+
+    li.addEventListener('click', () => openEditModal(ev));
+
+    list.appendChild(li);
+  });
+}
+
+// ===== 삭제 =====
+async function onDelete(ev) {
+  if (!confirm(`"${ev.title}" 일정을 삭제할까요?`)) return;
+
+  const myName = localStorage.getItem('tkm_username') || '';
+  if (ev.author && myName && ev.author.trim() !== myName.trim()) {
+    if (!confirm(`이 일정은 "${ev.author}"님이 등록했습니다. 그래도 삭제하시겠어요?`)) return;
+  }
+
+  let deleteSeries = false;
+  if (ev.isRecurring) {
+    deleteSeries = confirm('반복 일정입니다.\n확인 = 반복 전체 삭제\n취소 = 이 날짜만 삭제');
+  }
+
+  // 낙관적 삭제 — 서버 응답 기다리지 않고 화면에서 바로 제거, 실패하면 되돌림
+  const matchKey = ev.recurringEventId || ev.id;
+  const removed = deleteSeries
+    ? state.events.filter(e => (e.recurringEventId || e.id) === matchKey)
+    : state.events.filter(e => e.id === ev.id);
+  state.events = state.events.filter(e => !removed.includes(e));
+  renderGrid();
+  renderDayPanel();
+
+  let res;
+  try {
+    res = await apiPost({ action: 'delete', eventId: ev.id, deleteSeries });
+  } catch (err) {
+    res = { ok: false, error: err.message || '네트워크 오류' };
+  }
+
+  if (!res.ok) {
+    state.events.push(...removed); // 롤백
+    renderGrid();
+    renderDayPanel();
+    alert('삭제 실패: ' + res.error);
+    return;
+  }
+
+  await loadMonth(); // 성공 — 같은 달이면 loadMonth가 깜빡임 없이 조용히 재동기화
+}
+
+// ===== 추가/수정 모달 =====
+function renderCatChips(activeCategory) {
+  const wrap = $('#catChips');
+  wrap.innerHTML = '';
+
+  // 아무 카테고리도 지정 안 한 상태 — 흰 점, 기본값
+  const noneChip = document.createElement('button');
+  noneChip.type = 'button';
+  noneChip.className = 'chip' + (!activeCategory ? ' active' : '');
+  noneChip.dataset.cat = '';
+  noneChip.innerHTML = `<span class="dot dot-none"></span>None`;
+  noneChip.addEventListener('click', () => {
+    wrap.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    noneChip.classList.add('active');
+  });
+  wrap.appendChild(noneChip);
+
+  Object.entries(state.categories).forEach(([name, colorId]) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    const isActive = activeCategory === name;
+    chip.className = 'chip' + (isActive ? ' active' : '');
+    chip.dataset.cat = name;
+    chip.innerHTML = `<span class="dot" style="background:var(${DOT_COLOR[colorId] || '--c8'})"></span>${name}`;
+    chip.addEventListener('click', () => {
+      wrap.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+    });
+    wrap.appendChild(chip);
+  });
+}
+
+function openAddModal() {
+  state.editingId = null;
+  $('#modalTitle').textContent = 'Add Event';
+  $('#fDate').value = state.selectedDate || todayKey();
+  $('#fTime').value = ''; // 비워두면 하루종일 — 억지로 기본 시간을 채우지 않음
+  $('#fTitle').value = '';
+  $('#fAuthor').value = localStorage.getItem('tkm_username') || '';
+  $('#fRepeat').value = 'none';
+  $('#fIntervalDays').value = 3;
+  $('#fUntil').value = '';
+  $('#repeatRow').hidden = false;
+  $('#biweeklyRow').hidden = true;
+  $('#customRow').hidden = true;
+  $('#untilRow').hidden = true;
+  setHint('');
+  renderCatChips();
+  $('#weekdayPicker').querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  $('#modalBackdrop').classList.add('open');
+}
+
+function openEditModal(ev) {
+  state.editingId = ev.id;
+  $('#modalTitle').textContent = 'Edit Event';
+  $('#fDate').value = ev.date;
+  $('#fTime').value = ev.allDay ? '' : (ev.time || '');
+  $('#fTitle').value = ev.title;
+  $('#fAuthor').value = ev.author || '';
+  // 수정 모드에서는 반복 패턴 자체는 바꾸지 않음(복잡도 방지) — 삭제 후 재등록으로 안내
+  $('#repeatRow').hidden = true;
+  $('#biweeklyRow').hidden = true;
+  $('#customRow').hidden = true;
+  $('#untilRow').hidden = true;
+  setHint(ev.isRecurring ? 'Recurring event — only this date will be changed. (To change the repeat pattern, delete and re-add.)' : '', 'info');
+  renderCatChips(ev.category);
+  $('#modalBackdrop').classList.add('open');
+}
+
+// 반복 유형이 '매주'/'격주'가 됐을 때, 아직 아무 요일도 안 골랐으면 선택한 날짜의 요일을 기본 체크
+function preselectWeekdayIfEmpty() {
+  const picker = $('#weekdayPicker');
+  if (picker.querySelectorAll('button.active').length) return; // 이미 골라둔 게 있으면 안 건드림
+  const dow = weekdayOf($('#fDate').value || todayKey());
+  const btn = picker.querySelector(`button[data-day="${dow}"]`);
+  if (btn) btn.classList.add('active');
+}
+function closeAddModal() { $('#modalBackdrop').classList.remove('open'); }
+
+async function onSaveEvent() {
+  const title = $('#fTitle').value.trim();
+  const date = $('#fDate').value;
+  const time = $('#fTime').value; // '' 이면 하루종일
+  const author = $('#fAuthor').value.trim();
+  const activeChip = $('#catChips .chip.active');
+  const category = activeChip ? activeChip.dataset.cat : '';
+
+  if (!title) { setHint('Please enter a title.', 'error'); return; }
+  if (!date)  { setHint('Please select a date.', 'error'); return; }
+
+  if (author) localStorage.setItem('tkm_username', author);
+
+  if (state.editingId) {
+    await saveEdit(state.editingId, { title, date, time: time || null, category, author });
+    return;
+  }
+
+  const repeatType = $('#fRepeat').value;
+  let repeat = null;
+  if (repeatType !== 'none') {
+    repeat = { freq: repeatType };
+    if (repeatType === 'weekly' || repeatType === 'biweekly') {
+      const days = [...$('#weekdayPicker').querySelectorAll('button.active')].map(b => b.dataset.day);
+      if (!days.length) { setHint('Please select at least one day.', 'error'); return; }
+      repeat.byday = days;
+    }
+    if (repeatType === 'custom') {
+      repeat.intervalDays = parseInt($('#fIntervalDays').value, 10) || 1;
+    }
+    const until = $('#fUntil').value;
+    if (until) repeat.until = until;
+  }
+
+  // 낙관적 업데이트 — 서버 응답 기다리지 않고 화면에 바로 반영, 저장은 백그라운드에서 진행
+  const tempId = 'temp-' + Date.now();
+  const optimistic = {
+    id: tempId, recurringEventId: null, isRecurring: !!repeat,
+    title, date, time: time || null, allDay: !time,
+    category, author, colorId: state.categories[category] || '8'
+  };
+  state.events.push(optimistic);
+  state.selectedDate = date;
+  closeAddModal();
+  renderGrid();
+  renderDayPanel();
+
+  let res;
+  try {
+    res = await apiPost({ action: 'add', title, date, time: time || null, category, author, repeat });
+  } catch (err) {
+    res = { ok: false, error: err.message || '네트워크 오류' };
+  }
+
+  if (!res.ok) {
+    // 실패 — 방금 넣은 낙관적 항목만 롤백
+    state.events = state.events.filter(e => e.id !== tempId);
+    renderGrid();
+    renderDayPanel();
+    alert('저장 실패: ' + res.error);
+    return;
+  }
+
+  // 성공 — 실제 서버 상태로 재동기화(반복 일정이면 다른 달 확장분까지 정확히 반영됨)
+  await loadMonth();
+}
+
+// ===== 수정 저장 (낙관적 업데이트 + 실패 시 롤백) =====
+async function saveEdit(id, fields) {
+  const idx = state.events.findIndex(e => e.id === id);
+  const prev = idx >= 0 ? { ...state.events[idx] } : null;
+
+  if (idx >= 0) {
+    state.events[idx] = {
+      ...state.events[idx],
+      title: fields.title, date: fields.date,
+      time: fields.time, allDay: !fields.time,
+      category: fields.category, author: fields.author,
+      colorId: state.categories[fields.category] || '8'
+    };
+  }
+  closeAddModal();
+  renderGrid();
+  renderDayPanel();
+
+  let res;
+  try {
+    res = await apiPost({ action: 'update', eventId: id, ...fields });
+  } catch (err) {
+    res = { ok: false, error: err.message || '네트워크 오류' };
+  }
+
+  if (!res.ok) {
+    if (prev && idx >= 0) state.events[idx] = prev; // 롤백
+    renderGrid();
+    renderDayPanel();
+    alert('수정 실패: ' + res.error);
+    return;
+  }
+
+  await loadMonth();
+}
+
+// ===== Recurring event management =====
+const WEEKDAY_ABBR_EN = { SU:'Sun', MO:'Mon', TU:'Tue', WE:'Wed', TH:'Thu', FR:'Fri', SA:'Sat' };
+
+function describeRRule(rrule) {
+  if (!rrule) return '';
+  const parts = {};
+  rrule.replace('RRULE:', '').split(';').forEach(p => {
+    const [k, v] = p.split('=');
+    parts[k] = v;
+  });
+  const interval = parseInt(parts.INTERVAL || '1', 10);
+  let label;
+  if (parts.FREQ === 'DAILY') label = `Every ${interval} day${interval > 1 ? 's' : ''}`;
+  else if (parts.FREQ === 'WEEKLY') label = interval >= 2 ? 'Biweekly' : 'Weekly';
+  else label = parts.FREQ || '';
+
+  if (parts.BYDAY) {
+    const days = parts.BYDAY.split(',').map(d => WEEKDAY_ABBR_EN[d] || d).join(',');
+    label += ` on ${days}`;
+  }
+  if (parts.UNTIL) {
+    const y = parts.UNTIL.slice(0, 4), m = parts.UNTIL.slice(4, 6), d = parts.UNTIL.slice(6, 8);
+    label += ` (until ${y}-${m}-${d})`;
+  }
+  return label;
+}
+
+async function openRecurringModal() {
+  $('#recurringBackdrop').classList.add('open');
+  const list = $('#recurringList');
+  list.innerHTML = '<li class="empty-hint">Loading...</li>';
+
+  const res = await apiGet({ action: 'list-recurring' });
+  if (!res.ok) { list.innerHTML = '<li class="empty-hint">Failed to load</li>'; return; }
+  renderRecurringList(res.series);
+}
+
+function renderRecurringList(series) {
+  const list = $('#recurringList');
+  list.innerHTML = '';
+  if (!series.length) {
+    list.innerHTML = '<li class="empty-hint">No recurring events</li>';
+    return;
+  }
+  series.forEach(s => {
+    const li = document.createElement('li');
+    li.className = 'event-row';
+
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dotStyle(dot, s);
+    li.appendChild(dot);
+
+    const body = document.createElement('div');
+    body.className = 'event-body';
+    const title = document.createElement('span');
+    title.className = 'event-title';
+    title.textContent = s.title;
+    body.appendChild(title);
+    const meta = document.createElement('span');
+    meta.className = 'event-meta';
+    meta.textContent = [describeRRule(s.rrule), s.category, s.author].filter(Boolean).join(' · ');
+    body.appendChild(meta);
+    li.appendChild(body);
+
+    const del = document.createElement('button');
+    del.className = 'event-del';
+    del.textContent = '×';
+    del.addEventListener('click', async () => {
+      if (!confirm(`"${s.title}" 반복 일정 전체를 삭제할까요?`)) return;
+
+      // 낙관적 삭제 — 목록에서 바로 제거, 실패하면 되돌림
+      const remaining = series.filter(x => x.id !== s.id);
+      renderRecurringList(remaining);
+
+      let r;
+      try {
+        r = await apiPost({ action: 'delete', eventId: s.id, deleteSeries: true });
+      } catch (err) {
+        r = { ok: false, error: err.message || '네트워크 오류' };
+      }
+
+      if (!r.ok) {
+        alert('삭제 실패: ' + r.error);
+        renderRecurringList(series); // 롤백
+        return;
+      }
+      loadMonth(); // 메인 그리드에서도 점 갱신
+    });
+    li.appendChild(del);
+
+    list.appendChild(li);
+  });
+}
+
+// ===== 이벤트 바인딩 =====
+function bindEvents() {
+  $('#prevMonth').addEventListener('click', () => {
+    state.month--; if (state.month < 1) { state.month = 12; state.year--; }
+    loadMonth();
+  });
+  $('#nextMonth').addEventListener('click', () => {
+    state.month++; if (state.month > 12) { state.month = 1; state.year++; }
+    loadMonth();
+  });
+  $('#todayBtn').addEventListener('click', () => {
+    const now = new Date();
+    state.year = now.getFullYear(); state.month = now.getMonth() + 1;
+    state.selectedDate = todayKey();
+    loadMonth();
+  });
+
+  $('#openAdd').addEventListener('click', openAddModal);
+  $('#closeModal').addEventListener('click', closeAddModal);
+  $('#modalBackdrop').addEventListener('click', (e) => { if (e.target.id === 'modalBackdrop') closeAddModal(); });
+  $('#saveEvent').addEventListener('click', onSaveEvent);
+
+  // 업무명만 입력하고 엔터 → 나머지 기본값 그대로 바로 저장 (아무 설정도 안 건드리는 사용자용)
+  $('#fTitle').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); onSaveEvent(); }
+  });
+
+  $('#fRepeat').addEventListener('change', (e) => {
+    const v = e.target.value;
+    $('#biweeklyRow').hidden = !(v === 'weekly' || v === 'biweekly');
+    $('#customRow').hidden = v !== 'custom';
+    $('#untilRow').hidden = v === 'none';
+    if (v === 'weekly' || v === 'biweekly') preselectWeekdayIfEmpty();
+  });
+
+  $('#fDate').addEventListener('change', () => {
+    // 날짜를 바꾸면, 아직 요일을 고르지 않았을 때만 기본 체크를 그 날짜 기준으로 다시 맞춤
+    const v = $('#fRepeat').value;
+    if (v === 'weekly' || v === 'biweekly') preselectWeekdayIfEmpty();
+  });
+
+  $('#weekdayPicker').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-day]');
+    if (btn) btn.classList.toggle('active');
+  });
+
+  // ── 설정 팝업 ──
+  const closePopover = () => {
+    $('#settingsPopover').classList.remove('open');
+    $('#popoverBackdrop').classList.remove('open');
+  };
+  $('#gearBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#settingsPopover').classList.toggle('open');
+    $('#popoverBackdrop').classList.toggle('open');
+  });
+  $('#popoverBackdrop').addEventListener('click', closePopover);
+
+  $('#settingsPopover').addEventListener('click', (e) => {
+    const themeBtn = e.target.closest('[data-theme]');
+    if (themeBtn) {
+      applyTheme(themeBtn.dataset.theme);
+      localStorage.setItem('tkm_theme', themeBtn.dataset.theme);
+      closePopover();
+      return;
+    }
+    const viewBtn = e.target.closest('[data-view]');
+    if (viewBtn) {
+      applyViewMode(viewBtn.dataset.view);
+      localStorage.setItem('tkm_viewmode', viewBtn.dataset.view);
+      closePopover();
+      return;
+    }
+  });
+
+  $('#openRecurringMgmt').addEventListener('click', () => {
+    closePopover();
+    openRecurringModal();
+  });
+  $('#closeRecurring').addEventListener('click', () => $('#recurringBackdrop').classList.remove('open'));
+  $('#recurringBackdrop').addEventListener('click', (e) => {
+    if (e.target.id === 'recurringBackdrop') $('#recurringBackdrop').classList.remove('open');
+  });
+
+  $('#dayPanelToggle').addEventListener('click', () => {
+    state.dayPanelCollapsed = !state.dayPanelCollapsed;
+    updateDayPanelVisibility();
+  });
+
+  // ── 창 컨트롤 (Electron 연결 전까지는 window.api가 없어 조용히 무시됨) ──
+  $('#pinBtn').addEventListener('click', async () => {
+    const pinned = await window.api?.togglePin?.();
+    if (pinned !== undefined) $('#pinBtn').classList.toggle('active', pinned);
+  });
+  $('#minimizeBtn').addEventListener('click', () => window.api?.winMinimize?.());
+  $('#closeBtn').addEventListener('click', () => window.api?.winClose?.());
+  window.api?.getPin?.().then(p => { if (p !== undefined) $('#pinBtn').classList.toggle('active', p); });
 }
 
 init();
