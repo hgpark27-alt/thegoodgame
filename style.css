@@ -49,6 +49,13 @@
 
 * { box-sizing: border-box; }
 
+/* 위젯 느낌을 위해 네이티브 크롬 스크롤바 숨김 — 스크롤 자체(overflow:auto)는 그대로 동작 */
+::-webkit-scrollbar { width: 0; height: 0; }
+
+html, body {
+  overflow-x: hidden; /* 세로 스크롤바가 뜰 때 폭 계산이 밀려 가로 스크롤이 생기는 것 방지 */
+}
+
 body {
   margin: 0;
   font-family: "Malgun Gothic", "맑은 고딕", "Segoe UI", sans-serif;
@@ -63,8 +70,7 @@ body {
 #app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
+  /* 높이는 고정하지 않음 — 콘텐츠 크기만큼만 차지, JS가 이 크기를 재서 창 크기를 맞춤 */
 }
 
 /* ── 타이틀 바 (창 컨트롤) ─────────────────────────── */
@@ -90,6 +96,8 @@ body {
 .icon-btn:hover { background: var(--bg-soft); color: var(--text); }
 .icon-btn.active { color: var(--accent); }
 #closeBtn:hover { background: var(--danger); color: #fff; }
+.icon-btn.spinning svg { animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── 상단 바 ─────────────────────────── */
 .topbar {
@@ -177,7 +185,10 @@ body {
   box-sizing: border-box;
 }
 .cell.today .daynum {
-  border: 1.5px solid var(--accent);
+  /* border 대신 box-shadow로 링을 그림 — border는 box-sizing:border-box와 만나면
+     콘텐츠 박스를 줄여서 line-height(26px)와 어긋나 숫자가 미묘하게 아래로 쏠렸었음.
+     box-shadow는 레이아웃에 전혀 영향을 안 줘서 다른 날짜와 정확히 같은 중앙정렬 유지됨. */
+  box-shadow: inset 0 0 0 1.5px var(--accent);
   color: var(--accent);
   font-weight: 700;
 }
@@ -188,7 +199,7 @@ body {
 }
 /* 오늘 = 선택 날짜가 겹칠 때, 같은 색 테두리가 채우기에 묻혀 안 보이는 문제 방지 */
 .cell.today.selected .daynum {
-  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.85);
 }
 
 .dots { display: flex; gap: 2.5px; height: 5px; align-items: center; }
@@ -235,9 +246,50 @@ body {
 .day-panel-toggle:hover { color: var(--accent); }
 .day-panel.collapsed { display: none; }
 
+/* ── 개인 할일(로컬 전용, 구글 캘린더에 안 올라감) ─────────────────────────── */
+.section-divider-thick { height: 6px; background: var(--bg-soft); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+
+.personal-todo { padding: 8px 10px 12px; }
+.personal-todo-header { font-size: 11px; font-weight: 600; color: var(--text-soft); margin-bottom: 6px; }
+.todo-input {
+  width: 100%;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.todo-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.todo-list { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.todo-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+.todo-check {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: none;
+  flex-shrink: 0;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+}
+.todo-check.done { background: var(--accent); border-color: var(--accent); font-size: 10px; }
+.todo-text { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.todo-text.done { text-decoration: line-through; color: var(--text-soft); }
+.todo-del { background: none; border: none; color: var(--text-soft); font-size: 14px; cursor: pointer; padding: 0 3px; flex-shrink: 0; }
+.todo-del:hover { color: var(--danger); }
+
 /* ── 하단 일정 패널 ─────────────────────────── */
 .day-panel {
-  flex: 1;
+  max-height: 260px;  /* 일정이 많아도 창이 무한히 커지지 않도록 상한, 넘으면 내부 스크롤 */
   overflow-y: auto;
   border-top: 1px solid var(--border);
   background: var(--bg-soft);
@@ -353,6 +405,23 @@ body {
 }
 .chip .dot { width: 8px; height: 8px; }
 .chip.active { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+
+.recent-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: -6px 0 12px; }
+.recent-chips:empty { margin: 0; }
+.recent-chip {
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text-soft);
+  font-size: 11px;
+  cursor: pointer;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-chip:hover { border-color: var(--accent); color: var(--accent); }
 
 .weekday-picker { display: flex; gap: 4px; }
 .weekday-picker button {
