@@ -358,7 +358,7 @@ async function init() {
     const app = document.getElementById('app');
     if (!app.classList.contains('unfocused')) return;
     if (e.target.closest('.title-bar')) return; // 손잡이 클릭/드래그는 이동만, 펼치지 않음
-    if (e.target.closest('.personal-todo')) return; // 체크/삭제는 접힌 채로 그 자리에서 처리
+    if (e.target.closest('.todo-check') || e.target.closest('.todo-del')) return; // 체크박스/삭제만 접힌 채로 처리, My Notes 나머지 부분은 눌러도 펼쳐짐
     restoreOverlaysOnFocus();
   });
   // 손잡이 더블클릭하면 펼쳐지게 — 기존 트리거(손잡이 밖 클릭)는 그대로 유지.
@@ -1326,6 +1326,25 @@ function bindEvents() {
   $('#autoLaunchBtn')?.addEventListener('click', async () => {
     const next = await window.api?.toggleAutoLaunch?.();
     $('#autoLaunchBtn').classList.toggle('active', !!next);
+    resizeToContent();
+  });
+
+  // ── 수동 업데이트 확인 ──
+  $('#checkUpdateBtn')?.addEventListener('click', () => {
+    $('#updateStatus').textContent = 'Checking for updates...';
+    resizeToContent();
+    window.api?.checkForUpdates?.();
+  });
+  window.api?.onUpdateStatus?.((data) => {
+    const messages = {
+      checking: 'Checking for updates...',
+      available: `Update found (v${data.extra}) — downloading...`,
+      'not-available': 'You have the latest version.',
+      downloaded: `Update ready (v${data.extra}) — restart to install.`,
+      error: 'Update check failed.'
+    };
+    const el = $('#updateStatus');
+    if (el) el.textContent = messages[data.status] || '';
     resizeToContent();
   });
   $('#closeRecurring').addEventListener('click', () => { $('#recurringBackdrop').classList.remove('open'); resizeToContent(); });
