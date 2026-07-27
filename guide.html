@@ -145,6 +145,80 @@
   .mock-notes .row i { width: 7px; height: 7px; border-radius: 50%; border: 1.3px solid var(--ink-faint); display: block; flex-shrink: 0; }
   .mock-caption { text-align: center; font-size: 12px; color: var(--ink-faint); margin-top: 12px; }
 
+  /* ── 모드 소개(Simple/Max/다이어리) — 텍스트 옆에 캡처 느낌 미니 스크린샷 ───────────────────────────── */
+  .mode-row {
+    display: grid;
+    grid-template-columns: 1fr 190px;
+    gap: 24px;
+    align-items: center;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .mode-row:last-child { border-bottom: none; }
+  .mode-row .label { font-weight: 800; font-size: 14.5px; letter-spacing: -0.01em; margin-bottom: 4px; }
+  .mode-row .label small {
+    display: inline-block; margin-left: 6px; font-weight: 600; color: var(--ink-faint);
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .mode-row .desc { font-size: 14.5px; color: var(--ink-soft); }
+  .mode-row .desc b { color: var(--ink); font-weight: 700; }
+  .mode-shot {
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 10px 22px -12px rgba(28, 28, 30, 0.3), 0 0 0 1px var(--line);
+    font-size: 8px;
+  }
+  .mode-shot-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 7px; color: var(--ink-faint); font-weight: 700; font-size: 7.5px;
+    border-bottom: 1px solid var(--line);
+  }
+  .mode-shot-bar .dots { display: flex; gap: 2px; }
+  .mode-shot-bar .dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-faint); display: block; }
+
+  /* Simple / Max 공통 그리드 뼈대 */
+  .mode-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 5px 6px; }
+  .mode-grid .d { text-align: center; color: var(--ink-soft); position: relative; padding: 2px 0; }
+  .mode-grid .d.today { background: var(--accent); color: #fff; border-radius: 50%; font-weight: 700; }
+  .mode-grid .d.dot::after {
+    content: ""; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 3px; height: 3px; border-radius: 50%; background: #d50000;
+  }
+  /* Max 모드는 칸이 커지고 안에 제목 칩이 들어감 */
+  .mode-grid.mode-grid--max .d {
+    min-height: 20px; border-radius: 3px; text-align: left; padding: 1px 2px;
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  .mode-grid.mode-grid--max .d.today { color: var(--accent); background: var(--accent-soft); }
+  .mode-grid.mode-grid--max .chip {
+    display: flex; align-items: center; gap: 2px; font-size: 6px; color: var(--ink);
+    white-space: nowrap; overflow: hidden;
+  }
+  .mode-grid.mode-grid--max .chip i { width: 3px; height: 3px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+  .mode-grid.mode-grid--max .chip span { overflow: hidden; text-overflow: ellipsis; }
+
+  /* 다이어리 모드 — 달력(좁게) + My Notes/일정(오른쪽) 두 칸 구성 */
+  .mode-shot--diary { display: flex; width: 100%; }
+  .mode-shot--diary .diary-cal { flex: 3; min-width: 0; }
+  .mode-shot--diary .diary-cal .mode-grid { grid-template-columns: repeat(7, 1fr); padding: 4px 5px; }
+  .mode-shot--diary .diary-side {
+    flex: 2; min-width: 0; border-left: 1px solid var(--line); padding: 7px 8px; background: var(--paper);
+  }
+  .mode-shot--diary .diary-side h4 {
+    margin: 0 0 4px; font-size: 6.5px; font-weight: 800; color: var(--ink-faint);
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .mode-shot--diary .diary-side h4:not(:first-child) { margin-top: 8px; }
+  .mode-shot--diary .diary-row { display: flex; align-items: center; gap: 4px; padding: 2px 0; color: var(--ink); }
+  .mode-shot--diary .diary-row i { width: 6px; height: 6px; border-radius: 3px; border: 1px solid var(--ink-faint); flex-shrink: 0; display: block; }
+  .mode-shot--diary .diary-row.ev i { border-radius: 50%; border: none; background: var(--accent); width: 4px; height: 4px; }
+
+  @media (max-width: 620px) {
+    .mode-row { grid-template-columns: 1fr; }
+    .mode-shot, .mode-shot--diary { max-width: 260px; margin: 0 auto; }
+  }
+
   /* ── 섹션 공통 ───────────────────────────── */
   section { margin-top: 52px; }
   .section-head {
@@ -518,10 +592,6 @@
         <div class="desc">창 우하단 모서리를 끌면 폭을 넓힐 수 있어요. 일정 제목이 길어서 잘릴 때 유용합니다.</div>
       </div>
       <div class="feat">
-        <div class="label">다이어리 모드<small>제목표시줄 아이콘</small></div>
-        <div class="desc">제목표시줄의 다이어리 아이콘을 누르면 옆으로 넓어지면서 <b>달력·My Notes·오늘 일정</b>을 한 화면에 다 보여주는 보드 형태로 바뀌어요. 달력/My Notes 사이 경계선을 잡고 좌우로 끌면 비율도 조절할 수 있고, 이 모드에선 다른 곳을 클릭해도 자동으로 안 접혀요. 다시 아이콘을 누르면 원래 위젯 크기로 돌아갑니다.</div>
-      </div>
-      <div class="feat">
         <div class="label">설정 메뉴<small>⚙</small></div>
         <div class="desc">톱니바퀴 아이콘에서 보기 모드, 테마, 반복 일정 관리, 자동 실행, 개인 캘린더 연동을 할 수 있어요.</div>
       </div>
@@ -534,14 +604,65 @@
 
   <section id="views">
     <div class="section-head"><span class="no">03</span><h2>보기 모드</h2></div>
-    <div class="feat-list">
-      <div class="feat">
+
+    <div class="mode-row">
+      <div>
         <div class="label">Simple<small>기본값</small></div>
         <div class="desc">날짜 아래 작은 점으로만 표시. 마우스를 올리면 그날 일정 목록이 바로 뜹니다.</div>
       </div>
-      <div class="feat">
+      <div class="mode-shot">
+        <div class="mode-shot-bar"><span>TKM Calendar</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <div class="mode-grid">
+          <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+          <span>28</span><span>29</span><span>30</span><span>1</span><span class="dot">2</span><span>3</span><span>4</span>
+          <span>5</span><span class="dot">6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span>
+          <span>12</span><span>13</span><span class="dot">14</span><span class="today">15</span><span>16</span><span class="dot">17</span><span>18</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mode-row">
+      <div>
         <div class="label">Max<small>한눈에</small></div>
         <div class="desc">칸 안에 일정 제목이 바로 보여요. 한 달 전체를 훑어봐야 할 때 편합니다.</div>
+      </div>
+      <div class="mode-shot">
+        <div class="mode-shot-bar"><span>TKM Calendar</span><span class="dots"><i></i><i></i><i></i></span></div>
+        <div class="mode-grid mode-grid--max">
+          <div class="d">2<div class="chip"><i></i><span>성적서 마감</span></div></div>
+          <div class="d">3</div>
+          <div class="d">4</div>
+          <div class="d today">5<div class="chip"><i></i><span>주간 회의</span></div></div>
+          <div class="d">6</div>
+          <div class="d">7<div class="chip"><i></i><span>고객 미팅</span></div></div>
+          <div class="d">8</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mode-row">
+      <div>
+        <div class="label">다이어리 모드<small>제목표시줄 아이콘</small></div>
+        <div class="desc">제목표시줄의 다이어리 아이콘을 누르면 옆으로 넓어지면서 <b>달력·My Notes·오늘 일정</b>을 한 화면에 다 보여주는 보드 형태로 바뀌어요. 달력/My Notes 사이 경계선을 잡고 좌우로 끌면 비율도 조절되고, 이 모드에선 다른 곳을 클릭해도 자동으로 안 접혀요. 다시 아이콘을 누르면 원래 위젯 크기로 돌아갑니다.</div>
+      </div>
+      <div class="mode-shot mode-shot--diary">
+        <div class="diary-cal">
+          <div class="mode-shot-bar"><span>TKM Calendar</span><span class="dots"><i></i><i></i><i></i></span></div>
+          <div class="mode-grid">
+            <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+            <span>28</span><span>29</span><span>30</span><span>1</span><span class="dot">2</span><span>3</span><span>4</span>
+            <span>5</span><span class="dot">6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span>
+            <span>12</span><span>13</span><span class="dot">14</span><span class="today">15</span><span>16</span><span class="dot">17</span><span>18</span>
+          </div>
+        </div>
+        <div class="diary-side">
+          <h4>My Notes</h4>
+          <div class="diary-row"><i></i>세관 매뉴얼 회신</div>
+          <div class="diary-row"><i></i>AR bi-weekly meeting</div>
+          <h4>7월 15일 일정</h4>
+          <div class="diary-row ev"><i></i>주간 회의</div>
+          <div class="diary-row ev"><i></i>고객 미팅 준비</div>
+        </div>
       </div>
     </div>
   </section>
