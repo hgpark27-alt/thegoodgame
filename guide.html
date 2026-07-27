@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TKM Calendar 사용 설명서</title>
+<style>
+  /* 이 문서는 라이트 테마로만 고정합니다(다크 배경 금지 — 팀 표준). */
+  :root {
+    --paper: #fbfaf7;
+    --card: #ffffff;
+    --ink: #1c1c1e;
+    --ink-soft: #6e6e73;
+    --ink-faint: #a8a8ad;
+    --line: #e5e5ea;
+    --accent: #1d5fae;
+    --accent-soft: #e8f0fa;
+    --stamp: #b0392b;
+    --stamp-soft: #f7e9e6;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    margin: 0;
+    overflow-x: hidden;
+  }
+
+  body {
+    font-family: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", -apple-system,
+      BlinkMacSystemFont, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    padding: 0 20px 96px;
+  }
+
+  .page {
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  /* ── 상단 마크 ───────────────────────────── */
+  .masthead {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 56px 0 28px;
+  }
+  .masthead img { width: 40px; height: 40px; flex-shrink: 0; }
+  .masthead-text .eyebrow {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  .masthead-text h1 {
+    margin: 2px 0 0;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  /* ── 메모 인용구 ───────────────────────────── */
+  .memo {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 36px 32px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 2px rgba(28, 28, 30, 0.03);
+  }
+  .memo::before {
+    content: "발단";
+    position: absolute;
+    top: -11px;
+    left: 28px;
+    background: var(--stamp);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  .memo blockquote {
+    margin: 8px 0 0;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.55;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .memo blockquote span { color: var(--stamp); }
+  .memo .bridge {
+    margin: 20px 0 0;
+    padding-top: 20px;
+    border-top: 1px dashed var(--line);
+    color: var(--ink-soft);
+    font-size: 15px;
+  }
+  .memo .bridge strong { color: var(--ink); font-weight: 700; }
+
+  /* ── 위젯 미니어처 ───────────────────────────── */
+  .mock-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 40px 0 32px;
+  }
+  .mock {
+    width: 200px;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 20px 40px -16px rgba(28, 28, 30, 0.28), 0 0 0 1px var(--line);
+    font-size: 10px;
+  }
+  .mock-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+  .mock-bar .dots { display: flex; gap: 3px; }
+  .mock-bar .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--ink-faint); display: block; }
+  .mock-month { text-align: center; font-weight: 800; font-size: 12px; padding: 2px 0 6px; }
+  .mock-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; padding: 0 8px 8px; }
+  .mock-grid span { text-align: center; padding: 2px 0; color: var(--ink-soft); position: relative; }
+  .mock-grid span.today { background: var(--accent); color: #fff; border-radius: 50%; font-weight: 700; }
+  .mock-grid span.dot::after {
+    content: "";
+    position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+    width: 3px; height: 3px; border-radius: 50%; background: #d50000;
+  }
+  .mock-divider { height: 5px; background: var(--accent-soft); }
+  .mock-notes { padding: 8px; }
+  .mock-notes .h { font-weight: 700; color: var(--ink-soft); margin-bottom: 5px; }
+  .mock-notes .row { display: flex; align-items: center; gap: 5px; padding: 2px 0; color: var(--ink); }
+  .mock-notes .row i { width: 7px; height: 7px; border-radius: 50%; border: 1.3px solid var(--ink-faint); display: block; flex-shrink: 0; }
+  .mock-caption { text-align: center; font-size: 12px; color: var(--ink-faint); margin-top: 12px; }
+
+  /* ── 섹션 공통 ───────────────────────────── */
+  section { margin-top: 52px; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+  }
+  .section-head .no {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+  }
+  .section-head h2 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+  section > p.lead { color: var(--ink-soft); margin: -8px 0 20px; font-size: 15px; }
+
+  /* 설치 스텝 */
+  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+  .steps li { display: flex; gap: 14px; align-items: flex-start; }
+  .steps .num {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 800;
+    font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .steps .body { padding-top: 2px; }
+  .steps .body b { display: block; margin-bottom: 2px; }
+  .steps .body span.muted { color: var(--ink-soft); font-size: 14px; }
+
+  .btn-dl {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    background: var(--accent);
+    color: #fff;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 10px 18px;
+    border-radius: 10px;
+  }
+  .btn-dl:hover { filter: brightness(1.08); }
+
+  /* 다운로드 화면 안내(모형 — 실제 GitHub 화면을 그대로 옮긴 것은 아니고 어떤 걸 눌러야 하는지 보여주는 도식) */
+  .dl-explain {
+    display: grid;
+    grid-template-columns: 1fr 1.15fr;
+    gap: 20px;
+    align-items: center;
+    margin-top: 8px;
+  }
+  .gh-mock {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--card);
+    font-size: 12.5px;
+  }
+  .gh-mock-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .gh-mock-tag {
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .gh-mock-latest {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 2px 7px;
+    border-radius: 999px;
+  }
+  .gh-mock-assets-label {
+    padding: 8px 14px 4px;
+    color: var(--ink-faint);
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .gh-mock-asset {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .gh-mock-asset .gh-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--ink-faint); }
+  .gh-mock-asset .gh-name { flex: 1; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gh-mock-asset .gh-size { color: var(--ink-faint); font-size: 11px; flex-shrink: 0; }
+  .gh-mock-asset--hit { background: var(--accent-soft); position: relative; }
+  .gh-mock-asset--hit .gh-dot { background: var(--accent); }
+  .gh-mock-asset--hit .gh-name { color: var(--accent); font-weight: 800; }
+  .dl-callout {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    font-size: 14.5px;
+    color: var(--stamp);
+  }
+  .dl-callout .arrow { font-size: 20px; }
+  .dl-note { margin: 14px 0 0; font-size: 13.5px; color: var(--ink-soft); }
+  .dl-note b { color: var(--ink); }
+
+  @media (max-width: 620px) {
+    .dl-explain { grid-template-columns: 1fr; }
+  }
+
+  /* 캘린더 구독 주소 복사 상자 */
+  .url-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--accent-soft);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 10px 10px 14px;
+    margin: 4px 0 20px;
+  }
+  .url-text {
+    flex: 1;
+    min-width: 0;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--accent);
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+  .url-text::-webkit-scrollbar { display: none; }
+  .url-copy {
+    flex-shrink: 0;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .url-copy:hover { filter: brightness(1.08); }
+  .url-copy:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  /* 기능 목록 행 */
+  .feat-list { display: flex; flex-direction: column; }
+  .feat {
+    display: grid;
+    grid-template-columns: 132px 1fr;
+    gap: 18px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .feat:last-child { border-bottom: none; }
+  .feat .label {
+    font-weight: 800;
+    font-size: 14.5px;
+    letter-spacing: -0.01em;
+  }
+  .feat .label small {
+    display: block;
+    font-weight: 600;
+    color: var(--ink-faint);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 3px;
+  }
+  .feat .desc { font-size: 14.5px; color: var(--ink-soft); }
+  .feat .desc b { color: var(--ink); font-weight: 700; }
+  .feat .desc code {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-size: 13px;
+    font-family: inherit;
+    font-weight: 700;
+  }
+
+  /* Personal / Team Post 대비 */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .compare .card {
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .compare .card.team { border-color: var(--accent); background: var(--accent-soft); }
+  .compare .card h3 { margin: 0 0 6px; font-size: 14px; font-weight: 800; }
+  .compare .card.team h3 { color: var(--accent); }
+  .compare .card p { margin: 0; font-size: 13.5px; color: var(--ink-soft); }
+
+  /* 카테고리 범례 */
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; }
+  .legend .chip { display: flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--ink-soft); }
+  .legend .chip i { width: 9px; height: 9px; border-radius: 50%; display: block; flex-shrink: 0; }
+
+  /* FAQ */
+  .faq { display: flex; flex-direction: column; gap: 18px; }
+  .faq .q { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+  .faq .q::before { content: "Q. "; color: var(--stamp); }
+  .faq .a { color: var(--ink-soft); font-size: 14.5px; }
+  .faq .a::before { content: "A. "; color: var(--ink-faint); font-weight: 700; }
+
+  /* 닫는 도장 */
+  .closing {
+    margin-top: 64px;
+    text-align: center;
+    padding: 36px 20px 8px;
+  }
+  .closing .stamp-line {
+    display: inline-block;
+    border: 2px solid var(--stamp);
+    color: var(--stamp);
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    padding: 10px 22px;
+    border-radius: 999px;
+    transform: rotate(-2deg);
+  }
+  .closing .meta { margin-top: 18px; font-size: 12px; color: var(--ink-faint); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .memo, .mock-wrap { animation: rise 0.5s ease both; }
+    .mock-wrap { animation-delay: 0.08s; }
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  @media (max-width: 560px) {
+    .feat { grid-template-columns: 1fr; gap: 4px; }
+    .compare { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <header class="masthead">
+    <img src="data:image/png;base64,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" alt="">
+    <div class="masthead-text">
+      <div class="eyebrow">Hansol IONES</div>
+      <h1>TKM Calendar 사용 설명서</h1>
+    </div>
+  </header>
+
+  <div class="memo">
+    <blockquote>
+      이 앱은 임현태 팀장님의 물음 —<br>
+      <span>"왜 우리 팀원은 나의 말을 무시하는가"</span><br>
+      로 시작되었습니다.
+    </blockquote>
+    <p class="bridge">
+      정확히는 무시가 아니라 <strong>놓친 것</strong>이었습니다. 공지는 메신저 대화창 위로 흘러가고,
+      일정은 각자의 수첩과 머릿속에 따로 떠다니고 있었죠. 그래서 화면 한쪽에 <strong>항상 떠 있는 달력</strong>을
+      만들었습니다. 이제는 몰랐다는 말이 통하지 않습니다.
+    </p>
+  </div>
+
+  <div class="mock-wrap">
+    <div class="mock">
+      <div class="mock-bar">
+        <span>TKM Calendar</span>
+        <span class="dots"><i></i><i></i><i></i></span>
+      </div>
+      <div class="mock-month">Jul 2026</div>
+      <div class="mock-grid">
+        <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+        <span>28</span><span>29</span><span>30</span><span>1</span><span class="dot">2</span><span>3</span><span>4</span>
+        <span>5</span><span class="dot">6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span>
+        <span>12</span><span>13</span><span class="dot">14</span><span>15</span><span>16</span><span>17</span><span>18</span>
+        <span>19</span><span>20</span><span>21</span><span class="today">22</span><span>23</span><span class="dot">24</span><span>25</span>
+      </div>
+      <div class="mock-divider"></div>
+      <div class="mock-notes">
+        <div class="h">My Notes</div>
+        <div class="row"><i></i> 세관 매뉴얼 회신</div>
+        <div class="row"><i></i> AR bi-weekly meeting</div>
+      </div>
+    </div>
+  </div>
+  <p class="mock-caption">화면 한 켠에 항상 떠 있는 위젯 — 켜져 있는 한, 못 볼 수가 없습니다</p>
+
+  <section id="install">
+    <div class="section-head"><span class="no">01</span><h2>설치하기</h2></div>
+    <ol class="steps">
+      <li>
+        <span class="num">1</span>
+        <div class="body" style="width:100%;">
+          <b>아래 버튼을 눌러 다운로드 페이지로 이동</b>
+          <span class="muted">최신 버전 페이지가 열립니다. 한 번만 하면 됩니다.</span>
+          <div><a class="btn-dl" href="https://github.com/hgpark27-alt/tkm-calendar/releases/latest" target="_blank" rel="noopener">최신 버전 다운로드 페이지 열기 ↗</a></div>
+
+          <p class="dl-note" style="margin-top:18px;">페이지를 열면 파일이 여러 개 보이는데, 아래처럼 <b>맨 위의 <code>.exe</code> 파일</b> 하나만 누르면 됩니다.</p>
+          <div class="dl-explain">
+            <div class="dl-callout"><span class="arrow">→</span> 이 파일만 누르면 끝</div>
+            <div class="gh-mock">
+              <div class="gh-mock-top">
+                <span class="gh-mock-tag">v1.6.1</span>
+                <span class="gh-mock-latest">Latest</span>
+              </div>
+              <div class="gh-mock-assets-label">Assets · 3</div>
+              <div class="gh-mock-asset gh-mock-asset--hit">
+                <span class="gh-dot"></span>
+                <span class="gh-name">TKM-Calendar-Setup-1.6.1.exe</span>
+                <span class="gh-size">75 MB</span>
+              </div>
+              <div class="gh-mock-asset">
+                <span class="gh-dot"></span>
+                <span class="gh-name">TKM-Calendar-Setup-1.6.1.exe.blockmap</span>
+                <span class="gh-size">80 KB</span>
+              </div>
+              <div class="gh-mock-asset">
+                <span class="gh-dot"></span>
+                <span class="gh-name">latest.yml</span>
+                <span class="gh-size">352 B</span>
+              </div>
+            </div>
+          </div>
+          <p class="dl-note">나머지(<code>.blockmap</code>, <code>latest.yml</code>, Source code)는 자동 업데이트가 내부적으로 쓰는 파일이에요 — 무시하면 됩니다. 파일명은 버전이 올라가면 숫자만 바뀝니다.</p>
+        </div>
+      </li>
+      <li>
+        <span class="num">2</span>
+        <div class="body">
+          <b>실행 파일을 더블클릭</b>
+          <span class="muted">설치 위치를 물어보면 기본값 그대로 두고 진행하면 돼요.</span>
+        </div>
+      </li>
+      <li>
+        <span class="num">3</span>
+        <div class="body">
+          <b>끝. 자동으로 실행됩니다</b>
+          <span class="muted">다음부터는 실행할 때마다 새 버전이 있는지 한 번 확인해서, 있으면 "업데이트 하시겠습니까?"라고 물어봐요. Yes만 누르면 알아서 받아서 재시작까지 끝납니다.</span>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section id="basics">
+    <div class="section-head"><span class="no">02</span><h2>기본 조작</h2></div>
+    <div class="feat-list">
+      <div class="feat">
+        <div class="label">창 옮기기<small>Drag</small></div>
+        <div class="desc">상단 타이틀바를 누른 채 끌면 원하는 위치로 옮길 수 있어요.</div>
+      </div>
+      <div class="feat">
+        <div class="label">접기 / 펼치기<small>Focus</small></div>
+        <div class="desc">다른 곳을 클릭해 위젯이 포커스를 잃으면 달력만 남기고 자동으로 접혀요. 다시 클릭하면 원래대로 펼쳐집니다.</div>
+      </div>
+      <div class="feat">
+        <div class="label">폭 조절<small>Resize</small></div>
+        <div class="desc">창 우하단 모서리를 끌면 폭을 넓힐 수 있어요. 일정 제목이 길어서 잘릴 때 유용합니다.</div>
+      </div>
+      <div class="feat">
+        <div class="label">다이어리 모드<small>제목표시줄 아이콘</small></div>
+        <div class="desc">제목표시줄의 다이어리 아이콘을 누르면 옆으로 넓어지면서 <b>달력·My Notes·오늘 일정</b>을 한 화면에 다 보여주는 보드 형태로 바뀌어요. 달력/My Notes 사이 경계선을 잡고 좌우로 끌면 비율도 조절할 수 있고, 이 모드에선 다른 곳을 클릭해도 자동으로 안 접혀요. 다시 아이콘을 누르면 원래 위젯 크기로 돌아갑니다.</div>
+      </div>
+      <div class="feat">
+        <div class="label">설정 메뉴<small>⚙</small></div>
+        <div class="desc">톱니바퀴 아이콘에서 보기 모드, 테마, 반복 일정 관리, 자동 실행, 개인 캘린더 연동을 할 수 있어요.</div>
+      </div>
+      <div class="feat">
+        <div class="label">알림<small>🔔</small></div>
+        <div class="desc">종 아이콘을 누르면 최근 앱 업데이트 소식과, 팀 캘린더에 일정이 추가·수정·삭제된 내역(내가 올린 것도 포함)을 확인할 수 있어요. 안 읽은 게 있으면 빨간 점으로 표시됩니다.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="views">
+    <div class="section-head"><span class="no">03</span><h2>보기 모드</h2></div>
+    <div class="feat-list">
+      <div class="feat">
+        <div class="label">Simple<small>기본값</small></div>
+        <div class="desc">날짜 아래 작은 점으로만 표시. 마우스를 올리면 그날 일정 목록이 바로 뜹니다.</div>
+      </div>
+      <div class="feat">
+        <div class="label">Max<small>한눈에</small></div>
+        <div class="desc">칸 안에 일정 제목이 바로 보여요. 한 달 전체를 훑어봐야 할 때 편합니다.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="events">
+    <div class="section-head"><span class="no">04</span><h2>일정 등록하기</h2></div>
+    <p class="lead">날짜를 클릭하고 <code>+</code>를 누르면 등록 창이 열려요. 가장 먼저 고르는 건 <b>Personal</b>인지 <b>Team Post</b>인지입니다.</p>
+    <div class="compare">
+      <div class="card">
+        <h3>Personal</h3>
+        <p>이 컴퓨터에만 저장됩니다. 팀 캘린더에는 절대 안 올라가요. 나만 보는 일정 메모용.</p>
+      </div>
+      <div class="card team">
+        <h3>Team Post</h3>
+        <p>구글 캘린더에 등록되어 팀원 전체에게 공유됩니다. "몰랐다"를 막는 진짜 목적이 여기 있어요.</p>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:18px;">카테고리 색상은 이렇게 구분돼요:</p>
+    <div class="legend">
+      <span class="chip"><i style="background:#f6bf26"></i>자료</span>
+      <span class="chip"><i style="background:#3f51b5"></i>미팅</span>
+      <span class="chip"><i style="background:#8e24aa"></i>교육</span>
+      <span class="chip"><i style="background:#0b8043"></i>내방</span>
+      <span class="chip"><i style="background:#d50000"></i>행사</span>
+      <span class="chip"><i style="background:#616161"></i>기타</span>
+    </div>
+  </section>
+
+  <section id="notes">
+    <div class="section-head"><span class="no">05</span><h2>My Notes</h2></div>
+    <p class="lead">달력과 별개로 쓰는 개인 할 일 목록이에요. 아래 입력창에 적고 Enter만 누르면 됩니다. 이것도 이 컴퓨터에만 저장돼요.
+    일정 목록에서 <code>+ Add</code>를 누르면 그 일정 제목을 바로 My Notes로 옮길 수도 있어요.</p>
+    <div class="feat-list">
+      <div class="feat">
+        <div class="label">수정</div>
+        <div class="desc">항목의 글자 부분을 누르면 그 자리에서 바로 고칠 수 있어요.</div>
+      </div>
+      <div class="feat">
+        <div class="label">하위 항목<small>+ 버튼</small></div>
+        <div class="desc">항목 오른쪽의 <code>+</code>를 누르면 그 아래에 하위 항목을 하나 추가할 수 있어요(한 단계까지만 — 하위 항목의 하위 항목은 안 만들어져요).</div>
+      </div>
+      <div class="feat">
+        <div class="label">순서 바꾸기</div>
+        <div class="desc">글자 부분을 누른 채로 위아래로 끌면 순서를 바꿀 수 있어요. 최상위 항목은 최상위끼리, 하위 항목은 같은 상위 항목의 하위 항목끼리만 순서가 바뀝니다.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="extras">
+    <div class="section-head"><span class="no">06</span><h2>그 밖의 기능</h2></div>
+    <div class="feat-list">
+      <div class="feat">
+        <div class="label">공휴일 표시</div>
+        <div class="desc">대한민국 공휴일이 자동으로 빨갛게 표시돼요. 설날·추석처럼 매년 날짜가 바뀌는 것도 알아서 반영됩니다.</div>
+      </div>
+      <div class="feat">
+        <div class="label">테마</div>
+        <div class="desc">Light · Dark · Tack Style 세 가지 중 골라 쓸 수 있어요.</div>
+      </div>
+      <div class="feat">
+        <div class="label">자동 실행</div>
+        <div class="desc">톱니 메뉴의 <code>Start with Windows</code>를 켜두면 컴퓨터 켤 때마다 자동으로 떠요.</div>
+      </div>
+      <div class="feat">
+        <div class="label">자동 업데이트</div>
+        <div class="desc">실행할 때 한 번 새 버전이 있는지 확인해서, 있으면 "업데이트 하시겠습니까?"라고 물어봐요. Yes를 누르면 그때 받아서 알아서 재시작까지 끝납니다.</div>
+      </div>
+      <div class="feat">
+        <div class="label">개인 캘린더 연동<small>ICS</small></div>
+        <div class="desc">톱니 메뉴 → <code>Personal Calendar (ICS)</code>에서 본인의 개인 캘린더(구글·아웃룩·아이클라우드 등) 구독 주소를 넣으면, 그 일정이 이 컴퓨터에서만 보이는 개인 일정으로 같이 표시돼요. 팀 캘린더에는 전혀 영향 없습니다.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="phones">
+    <div class="section-head"><span class="no">07</span><h2>휴대폰·다른 캘린더에서도 보기</h2></div>
+    <p class="lead">Team Post로 등록한 일정은 실제 구글 캘린더에 올라가기 때문에, 아이폰·아이패드·안드로이드(삼성) 기본 캘린더 앱에도 그대로 띄울 수 있어요. 아래 주소 하나만 복사해서 붙여넣으면 됩니다.</p>
+
+    <div class="url-box">
+      <span class="url-text" id="icalUrl">https://calendar.google.com/calendar/ical/4b9c15c5a0e715482c08ecf5b10482391754fd997bb4fe7d5b3615cb5991b31c%40group.calendar.google.com/public/basic.ics</span>
+      <button class="url-copy" id="urlCopyBtn" type="button">복사</button>
+    </div>
+
+    <div class="feat">
+      <div class="label">아이폰<small>Apple 캘린더</small></div>
+      <div class="desc">설정 → 캘린더 → 계정 → 계정 추가 → 기타 → <b>구독 캘린더 추가</b> → 위 주소 붙여넣기 → 저장</div>
+    </div>
+    <div class="feat">
+      <div class="label">맥<small>Apple 캘린더</small></div>
+      <div class="desc">캘린더 앱 → 파일 → <b>새로운 캘린더 구독</b> → 위 주소 붙여넣기 → 구독</div>
+    </div>
+    <div class="feat">
+      <div class="label">안드로이드<small>삼성 캘린더</small></div>
+      <div class="desc">Google 캘린더 앱 → 왼쪽 메뉴 → "다른 캘린더" 옆 <b>＋ → URL로 등록</b> → 위 주소 붙여넣기 → 캘린더 추가. 구글 계정이 동기화돼 있으면 삼성 캘린더 앱에도 자동으로 나타나요.</div>
+    </div>
+    <p class="dl-note">이 방법은 <b>보기 전용</b>이에요. 휴대폰에서 직접 일정을 추가·수정하려면 구글 계정 자체를 캘린더 앱에 추가해야 하고(설정 → 계정 추가 → Google), 그 계정에 팀 캘린더 편집 권한이 있어야 합니다.</p>
+  </section>
+
+  <section id="faq">
+    <div class="section-head"><span class="no">08</span><h2>자주 묻는 것</h2></div>
+    <div class="faq">
+      <div>
+        <div class="q">Personal이랑 Team Post, 나중에 바꿀 수 있나요?</div>
+        <div class="a">수정 중엔 못 바꿔요. 저장 위치가 완전히 달라서, 실수를 막으려고 일부러 고정해뒀습니다.</div>
+      </div>
+      <div>
+        <div class="q">업데이트하면 제 My Notes 내용이 사라지나요?</div>
+        <div class="a">아니요. 실행 파일과 개인 데이터는 완전히 다른 폴더에 저장돼서, 몇 번을 업데이트해도 안전합니다.</div>
+      </div>
+      <div>
+        <div class="q">위젯이 안 보여요.</div>
+        <div class="a">항상 위에 떠 있는 창이라 다른 창에 가려질 일은 없어요. 작업표시줄에서 TKM Calendar 아이콘을 확인해보세요.</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="closing">
+    <div class="stamp-line">이제 "못 봤어요"는 안 통합니다</div>
+    <div class="meta">TKM Calendar · Hansol IONES</div>
+  </div>
+
+</div>
+
+<script>
+  (function () {
+    const btn = document.getElementById('urlCopyBtn');
+    const urlEl = document.getElementById('icalUrl');
+    if (!btn || !urlEl) return;
+    btn.addEventListener('click', async () => {
+      const text = urlEl.textContent;
+      let ok = false;
+      try {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      } catch {
+        // 클립보드 API가 막혀있으면 텍스트를 선택 상태로 만들어서 手동 복사(Ctrl+C)라도 되게 함
+        const range = document.createRange();
+        range.selectNodeContents(urlEl);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        try { ok = document.execCommand('copy'); } catch {}
+      }
+      btn.textContent = ok ? '복사됨 ✓' : '선택됨(Ctrl+C)';
+      setTimeout(() => { btn.textContent = '복사'; }, 1600);
+    });
+  })();
+</script>
+</body>
+</html>
