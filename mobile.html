@@ -41,7 +41,11 @@
   #nameSubmit:active { filter: brightness(0.92); }
 
   /* ── 메인 화면 ── */
+  /* #mainScreen/#nameScreen에 준 display:flex가 ID 선택자라 브라우저 기본 [hidden]{display:none}
+     규칙(속성 선택자, 낮은 우선순위)을 이겨버려서 hidden 속성을 줘도 안 숨겨지는 문제가 있었음 —
+     그래서 [hidden] 쪽을 ID+속성으로 다시 명시해서 우선순위를 확실히 더 높여줌 */
   #mainScreen { flex: 1; display: flex; flex-direction: column; }
+  #mainScreen[hidden], #nameScreen[hidden] { display: none; }
   header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 16px 16px 12px; border-bottom: 1px solid var(--border);
