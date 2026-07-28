@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>My Notes</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f4f5f7;
+    --border: #e2e4e8;
+    --text: #1c1e21;
+    --text-soft: #767a82;
+    --accent: #3a7afe;
+    --accent-soft: #eaf1ff;
+    --danger: #e0483e;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    color-scheme: light; /* 기기가 다크모드여도 이 페이지는 항상 밝은 배경으로 고정 */
+  }
+  #app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── 최초 이름 입력 화면 ── */
+  #nameScreen { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 24px; gap: 14px; }
+  #nameScreen h1 { font-size: 20px; margin: 0 0 4px; }
+  #nameScreen p { font-size: 13.5px; color: var(--text-soft); margin: 0 0 10px; line-height: 1.5; }
+  #nameInput {
+    font-size: 17px; padding: 14px 14px; border-radius: 12px;
+    border: 1.5px solid var(--border); background: var(--bg-soft); color: var(--text);
+  }
+  #nameInput:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+  #nameSubmit {
+    font-size: 16px; font-weight: 600; padding: 14px; border-radius: 12px;
+    border: none; background: var(--accent); color: #fff; cursor: pointer;
+  }
+  #nameSubmit:active { filter: brightness(0.92); }
+
+  /* ── 메인 화면 ── */
+  #mainScreen { flex: 1; display: flex; flex-direction: column; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 16px 12px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg); z-index: 5;
+  }
+  header .who { font-size: 15px; font-weight: 700; }
+  header .who span { color: var(--accent); }
+  #changeNameBtn, #refreshBtn {
+    font-size: 12px; color: var(--text-soft); background: var(--bg-soft);
+    border: 1px solid var(--border); border-radius: 999px; padding: 6px 11px; cursor: pointer;
+  }
+  .header-actions { display: flex; gap: 6px; }
+
+  .compose { display: flex; gap: 8px; padding: 14px 16px; }
+  #noteInput {
+    flex: 1; min-width: 0; font-size: 16px; padding: 12px 14px;
+    border-radius: 12px; border: 1.5px solid var(--border); background: var(--bg-soft); color: var(--text);
+  }
+  #noteInput:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+  #addBtn {
+    font-size: 15px; font-weight: 700; padding: 0 18px; border-radius: 12px;
+    border: none; background: var(--accent); color: #fff; cursor: pointer; flex-shrink: 0;
+  }
+  #addBtn:active { filter: brightness(0.92); }
+
+  #noteList { list-style: none; margin: 0; padding: 4px 12px 40px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .empty-hint { text-align: center; color: var(--text-soft); font-size: 13.5px; padding: 40px 20px; }
+
+  .note-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 12px; border-radius: 12px; background: var(--bg-soft);
+    border: 1px solid var(--border);
+  }
+  .note-check {
+    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+    border: 2px solid var(--border); background: none; color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer;
+  }
+  .note-check.done { background: var(--accent); border-color: var(--accent); }
+  .note-text { flex: 1; min-width: 0; font-size: 15.5px; word-break: break-all; }
+  .note-text.done { text-decoration: line-through; color: var(--text-soft); }
+  .note-edit-input {
+    flex: 1; min-width: 0; font: inherit; font-size: 15.5px; color: var(--text);
+    border: none; background: none; padding: 0; margin: 0; outline: none;
+    border-bottom: 1.5px solid var(--accent);
+  }
+  .note-del {
+    background: none; border: none; color: var(--text-soft); font-size: 20px;
+    cursor: pointer; padding: 2px 6px; flex-shrink: 0; line-height: 1;
+  }
+  .note-del:active { color: var(--danger); }
+
+  .sync-hint { text-align: center; font-size: 11.5px; color: var(--text-soft); padding: 6px 0 2px; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <div id="nameScreen">
+      <h1>이름을 입력해주세요</h1>
+      <p>TKM Calendar 데스크톱 앱과 같은 My Notes를 씁니다. 이미 데스크톱에서 쓰던 이름과
+        똑같이 입력하면 그 이어서 이어집니다.</p>
+      <input type="text" id="nameInput" placeholder="예: 박혜근">
+      <button id="nameSubmit">시작하기</button>
+    </div>
+
+    <div id="mainScreen" hidden>
+      <header>
+        <span class="who">My Notes — <span id="whoAmI"></span></span>
+        <div class="header-actions">
+          <button id="refreshBtn">새로고침</button>
+          <button id="changeNameBtn">이름변경</button>
+        </div>
+      </header>
+      <div class="compose">
+        <input type="text" id="noteInput" placeholder="할 일을 입력하고 추가">
+        <button id="addBtn">추가</button>
+      </div>
+      <ul id="noteList"></ul>
+      <div class="sync-hint" id="syncHint"></div>
+    </div>
+  </div>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbyqj6Sgwq-eW9hKV0QsilqEE8xDPBOak3v0eDLEjfVHUyLIeJV7Uzgie6iadRNEf2UeBw/exec';
+const $ = (s) => document.querySelector(s);
+const NAME_KEY = 'tkm_mobile_username';
+
+let userName = localStorage.getItem(NAME_KEY) || '';
+let myNotes = []; // owner === userName인 것만 서버에서 걸러서 들고 있음(평평한 목록, 하위항목 없음 — 모바일은 단순하게)
+
+async function apiGet(params) {
+  const q = new URLSearchParams({ ...params, _: Date.now() }).toString();
+  const r = await fetch(`${API_URL}?${q}`, { cache: 'no-store' });
+  return r.json();
+}
+async function apiPost(body) {
+  const r = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+
+function showNameScreen() {
+  $('#nameScreen').hidden = false;
+  $('#mainScreen').hidden = true;
+  $('#nameInput').value = userName;
+  setTimeout(() => $('#nameInput').focus(), 50);
+}
+function showMainScreen() {
+  $('#nameScreen').hidden = true;
+  $('#mainScreen').hidden = false;
+  $('#whoAmI').textContent = userName;
+}
+
+function makeTempId() {
+  return 'tmp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+}
+
+function renderNotes() {
+  const list = $('#noteList');
+  list.innerHTML = '';
+  if (!myNotes.length) {
+    const li = document.createElement('li');
+    li.className = 'empty-hint';
+    li.textContent = '아직 노트가 없어요. 위에서 추가해보세요.';
+    list.appendChild(li);
+    return;
+  }
+  const sorted = [...myNotes].sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+  sorted.forEach(note => list.appendChild(buildNoteRow(note)));
+}
+
+function buildNoteRow(note) {
+  const li = document.createElement('li');
+  li.className = 'note-item';
+  li.dataset.id = note.id;
+
+  const check = document.createElement('button');
+  check.className = 'note-check' + (note.done ? ' done' : '');
+  check.textContent = note.done ? '✓' : '';
+  check.addEventListener('click', () => toggleNote(note.id));
+  li.appendChild(check);
+
+  const text = document.createElement('span');
+  text.className = 'note-text' + (note.done ? ' done' : '');
+  text.textContent = note.text;
+  text.addEventListener('click', () => startEditNote(note.id));
+  li.appendChild(text);
+
+  if (note.assignee) {
+    const tag = document.createElement('span');
+    tag.style.cssText = 'flex-shrink:0;font-size:10px;font-weight:600;color:var(--text-soft);background:#fff;border:1px solid var(--border);border-radius:999px;padding:2px 7px;white-space:nowrap;';
+    tag.textContent = note.assignee + '님이 보냄';
+    li.appendChild(tag);
+  }
+
+  const del = document.createElement('button');
+  del.className = 'note-del';
+  del.textContent = '×';
+  del.addEventListener('click', () => deleteNote(note.id));
+  li.appendChild(del);
+
+  return li;
+}
+
+function startEditNote(id) {
+  const row = $(`#noteList li[data-id="${id}"]`);
+  const note = myNotes.find(n => n.id === id);
+  if (!row || !note) return;
+  const textEl = row.querySelector('.note-text');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'note-edit-input';
+  input.value = note.text;
+  row.replaceChild(input, textEl);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const commit = async () => {
+    if (done) return;
+    done = true;
+    const v = input.value.trim();
+    if (!v) { deleteNote(note.id); return; }
+    note.text = v;
+    renderNotes();
+    await apiPost({ action: 'taskUpdate', id: note.id, text: v });
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { done = true; renderNotes(); }
+  });
+  input.addEventListener('blur', commit);
+}
+
+async function fetchMyNotes(silent) {
+  if (!silent) $('#syncHint').textContent = '불러오는 중...';
+  try {
+    const res = await apiGet({ action: 'tasksList' });
+    if (res.ok) {
+      myNotes = res.tasks.filter(t => t.owner === userName && !t.parentId); // 모바일은 하위항목 없이 단순 목록만
+      renderNotes();
+      $('#syncHint').textContent = '';
+    }
+  } catch (err) {
+    $('#syncHint').textContent = '동기화 실패(오프라인?) — 새로고침으로 다시 시도하세요';
+    console.error('[fetchMyNotes]', err);
+  }
+}
+
+function addNote(text) {
+  const t = (text || '').trim();
+  if (!t) return;
+  const orders = myNotes.map(n => Number(n.order) || 0);
+  const newOrder = orders.length ? Math.min(...orders) - 1 : 0;
+  const tempId = makeTempId();
+  const note = { id: tempId, text: t, done: false, parentId: '', order: newOrder, owner: userName, assignee: '' };
+  myNotes.push(note);
+  renderNotes();
+  apiPost({ action: 'taskAdd', text: t, owner: userName, assignee: '', parentId: '', order: newOrder })
+    .then(res => {
+      if (res.ok) {
+        note.id = res.id;
+        const row = $(`#noteList li[data-id="${tempId}"]`);
+        if (row) row.dataset.id = res.id;
+      } else {
+        myNotes = myNotes.filter(n => n.id !== tempId);
+        renderNotes();
+      }
+    })
+    .catch(err => {
+      console.error('[addNote]', err);
+      myNotes = myNotes.filter(n => n.id !== tempId);
+      renderNotes();
+    });
+}
+function toggleNote(id) {
+  const note = myNotes.find(n => n.id === id);
+  if (!note) return;
+  note.done = !note.done;
+  renderNotes();
+  apiPost({ action: 'taskToggle', id });
+}
+function deleteNote(id) {
+  myNotes = myNotes.filter(n => n.id !== id);
+  renderNotes();
+  apiPost({ action: 'taskDelete', id });
+}
+
+// ===== 이벤트 바인딩 =====
+$('#nameSubmit').addEventListener('click', async () => {
+  const v = $('#nameInput').value.trim();
+  if (!v) { $('#nameInput').focus(); return; }
+  userName = v;
+  localStorage.setItem(NAME_KEY, v);
+  showMainScreen();
+  fetchMyNotes();
+  try { await apiPost({ action: 'memberRegister', name: v }); } catch (err) { console.error('[memberRegister]', err); }
+});
+$('#nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#nameSubmit').click(); });
+
+$('#changeNameBtn').addEventListener('click', () => { showNameScreen(); });
+$('#refreshBtn').addEventListener('click', () => fetchMyNotes());
+
+$('#addBtn').addEventListener('click', () => {
+  addNote($('#noteInput').value);
+  $('#noteInput').value = '';
+});
+$('#noteInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); addNote($('#noteInput').value); $('#noteInput').value = ''; }
+});
+
+// 화면 다시 보일 때(백그라운드→포그라운드 복귀 등) 자동 새로고침
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && userName) fetchMyNotes(true);
+});
+setInterval(() => { if (document.visibilityState === 'visible' && userName) fetchMyNotes(true); }, 60000);
+
+// ===== 초기 진입 =====
+if (userName) { showMainScreen(); fetchMyNotes(); }
+else { showNameScreen(); }
+</script>
+</body>
+</html>
