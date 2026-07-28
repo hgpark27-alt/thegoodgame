@@ -5,22 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>My Notes</title>
 <style>
+  /* TKM Calendar 데스크톱 앱(접힘모드/기본 위젯 상태)과 같은 색상·폰트를 그대로 씀 —
+     frontend/style.css의 :root 값과 동일(다이어리 모드가 아니라 평소 좁은 위젯 모드 기준) */
   :root {
     --bg: #ffffff;
-    --bg-soft: #f4f5f7;
-    --border: #e2e4e8;
-    --text: #1c1e21;
-    --text-soft: #767a82;
-    --accent: #3a7afe;
-    --accent-soft: #eaf1ff;
-    --danger: #e0483e;
+    --bg-soft: #f2f2f7;
+    --border: #e5e5ea;
+    --text: #1c1c1e;
+    --text-soft: #6e6e73;
+    --accent: #1d5fae;
+    --accent-soft: #e3edf9;
+    --danger: #ff3b30;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     margin: 0; padding: 0;
-    background: var(--bg);
+    background: var(--bg-soft);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    font-family: "Malgun Gothic", "맑은 고딕", "Segoe UI", sans-serif;
     color-scheme: light; /* 기기가 다크모드여도 이 페이지는 항상 밝은 배경으로 고정 */
   }
   #app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
@@ -46,54 +48,58 @@
      그래서 [hidden] 쪽을 ID+속성으로 다시 명시해서 우선순위를 확실히 더 높여줌 */
   #mainScreen { flex: 1; display: flex; flex-direction: column; }
   #mainScreen[hidden], #nameScreen[hidden] { display: none; }
+  /* 데스크톱 앱의 타이틀 바(.title-bar)와 같은 느낌 — 흰 바탕에 아래 얇은 경계선 */
   header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 16px 12px; border-bottom: 1px solid var(--border);
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
     position: sticky; top: 0; background: var(--bg); z-index: 5;
   }
-  header .who { font-size: 15px; font-weight: 700; }
-  header .who span { color: var(--accent); }
+  header .who { font-size: 13px; font-weight: 600; color: var(--text-soft); }
+  header .who span { color: var(--text); font-weight: 700; }
   #changeNameBtn, #refreshBtn {
-    font-size: 12px; color: var(--text-soft); background: var(--bg-soft);
-    border: 1px solid var(--border); border-radius: 999px; padding: 6px 11px; cursor: pointer;
+    font-size: 11.5px; color: var(--text-soft); background: var(--bg-soft);
+    border: 1px solid var(--border); border-radius: 999px; padding: 5px 10px; cursor: pointer;
   }
   .header-actions { display: flex; gap: 6px; }
 
-  .compose { display: flex; gap: 8px; padding: 14px 16px; }
+  /* 데스크톱 My Notes 섹션(.personal-todo-header)과 같은 작은 회색 라벨 */
+  .section-label { font-size: 11px; font-weight: 600; color: var(--text-soft); padding: 12px 14px 4px; }
+
+  .compose { display: flex; gap: 6px; padding: 0 14px 10px; }
   #noteInput {
-    flex: 1; min-width: 0; font-size: 16px; padding: 12px 14px;
-    border-radius: 12px; border: 1.5px solid var(--border); background: var(--bg-soft); color: var(--text);
+    flex: 1; min-width: 0; font-size: 15px; padding: 10px 12px;
+    border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text);
   }
   #noteInput:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
   #addBtn {
-    font-size: 15px; font-weight: 700; padding: 0 18px; border-radius: 12px;
+    font-size: 14px; font-weight: 700; padding: 0 16px; border-radius: 8px;
     border: none; background: var(--accent); color: #fff; cursor: pointer; flex-shrink: 0;
   }
   #addBtn:active { filter: brightness(0.92); }
 
-  #noteList { list-style: none; margin: 0; padding: 4px 12px 40px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  #noteList { list-style: none; margin: 0; padding: 0 10px 40px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
   .empty-hint { text-align: center; color: var(--text-soft); font-size: 13.5px; padding: 40px 20px; }
 
+  /* 데스크톱 .todo-item과 같은 카드 스타일(둥근 8px, 배경은 카드=흰색/페이지=연회색으로 대비) */
   .note-item {
     display: flex; align-items: center; gap: 10px;
-    padding: 12px 12px; border-radius: 12px; background: var(--bg-soft);
-    border: 1px solid var(--border);
+    padding: 11px 12px; border-radius: 8px; background: var(--bg);
   }
   .note-check {
-    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
-    border: 2px solid var(--border); background: none; color: #fff;
-    display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer;
+    width: 23px; height: 23px; border-radius: 50%; flex-shrink: 0;
+    border: 1.5px solid var(--border); background: none; color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 13px; cursor: pointer;
   }
   .note-check.done { background: var(--accent); border-color: var(--accent); }
-  .note-text { flex: 1; min-width: 0; font-size: 15.5px; word-break: break-all; }
+  .note-text { flex: 1; min-width: 0; font-size: 15px; word-break: break-all; }
   .note-text.done { text-decoration: line-through; color: var(--text-soft); }
   .note-edit-input {
-    flex: 1; min-width: 0; font: inherit; font-size: 15.5px; color: var(--text);
+    flex: 1; min-width: 0; font: inherit; font-size: 15px; color: var(--text);
     border: none; background: none; padding: 0; margin: 0; outline: none;
     border-bottom: 1.5px solid var(--accent);
   }
   .note-del {
-    background: none; border: none; color: var(--text-soft); font-size: 20px;
+    background: none; border: none; color: var(--text-soft); font-size: 18px;
     cursor: pointer; padding: 2px 6px; flex-shrink: 0; line-height: 1;
   }
   .note-del:active { color: var(--danger); }
@@ -113,12 +119,13 @@
 
     <div id="mainScreen" hidden>
       <header>
-        <span class="who">My Notes — <span id="whoAmI"></span></span>
+        <span class="who">TKM Calendar — <span id="whoAmI"></span></span>
         <div class="header-actions">
           <button id="refreshBtn">새로고침</button>
           <button id="changeNameBtn">이름변경</button>
         </div>
       </header>
+      <div class="section-label">My Notes</div>
       <div class="compose">
         <input type="text" id="noteInput" placeholder="할 일을 입력하고 추가">
         <button id="addBtn">추가</button>
